@@ -5,7 +5,7 @@ const timetableEntrySchema = new mongoose.Schema(
     subject: { type: String, required: true, trim: true },
     duration: { type: Number, default: 60 },
   },
-  { _id: false }
+  { _id: true }
 );
 
 const dayWiseScheduleSchema = new mongoose.Schema(

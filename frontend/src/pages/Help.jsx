@@ -152,7 +152,7 @@ const Help = () => {
               </div>
               <div>
                 <h4 className="font-medium text-gray-800 dark:text-white">Create Your Timetable</h4>
-                <p className="text-sm text-gray-600 dark:text-gray-300">Set up your weekly study schedule in Profile > Study Settings</p>
+                <p className="text-sm text-gray-600 dark:text-gray-300">Set up your weekly study schedule in Profile {'>'} Study Settings</p>
               </div>
             </div>
             <div className="flex items-start space-x-3">
@@ -202,7 +202,7 @@ const Help = () => {
           {categories.map((category, index) => {
             const Icon = getCategoryIcon(category);
             const categoryCount = faqs.filter(faq => faq.category === category).length;
-            
+
             return (
               <motion.button
                 key={category}
@@ -330,7 +330,7 @@ const Help = () => {
         </p>
         <div className="space-y-3">
           <p className="text-sm text-gray-600 dark:text-gray-300">
-            Focus Vault is designed to be intuitive and user-friendly. Most features are self-explanatory, 
+            Focus Vault is designed to be intuitive and user-friendly. Most features are self-explanatory,
             but if you need assistance, try exploring the app or refer to the FAQ above.
           </p>
           <p className="text-sm text-gray-500 dark:text-gray-400">

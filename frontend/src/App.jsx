@@ -12,10 +12,11 @@ import AboutUs from './pages/AboutUs';
 import Login from './pages/auth/Login';
 import Register from './pages/auth/Register';
 import LoadingScreen from './components/ui/LoadingScreen';
+import StudySession from './components/study/StudySession';
 
 function App() {
   const { user, loading } = useAuth();
-  
+
   if (loading) {
     return <LoadingScreen />;
   }
@@ -30,6 +31,7 @@ function App() {
             <Route path="/todo" element={<Todo />} />
             <Route path="/calendar" element={<Calendar />} />
             <Route path="/profile" element={<Profile />} />
+            <Route path="/session" element={<StudySession />} />
             <Route path="/help" element={<Help />} />
             <Route path="/about" element={<AboutUs />} />
             <Route path="*" element={<Navigate to="/" replace />} />

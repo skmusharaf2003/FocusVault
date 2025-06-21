@@ -27,6 +27,7 @@ export const StudyProvider = ({ children }) => {
   const [currentSession, setCurrentSession] = useState(null);
   const [isStudying, setIsStudying] = useState(false);
   const [loadingNotes, setLoadingNotes] = useState(false);
+  const [sessionTimer, setSessionTimer] = useState(null);
 
   const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
@@ -42,6 +43,41 @@ export const StudyProvider = ({ children }) => {
       axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
     }
   }, []);
+
+  // Timer management
+  useEffect(() => {
+    if (isStudying && currentSession) {
+      const interval = setInterval(() => {
+        setCurrentSession(prev => {
+          if (prev) {
+            const newElapsedTime = prev.elapsedTime + 1;
+            // Auto-save session state every 10 seconds
+            if (newElapsedTime % 10 === 0) {
+              saveSessionState({
+                ...prev,
+                elapsedTime: newElapsedTime
+              });
+            }
+            return {
+              ...prev,
+              elapsedTime: newElapsedTime
+            };
+          }
+          return prev;
+        });
+      }, 1000);
+
+      setSessionTimer(interval);
+      return () => {
+        if (interval) {
+          clearInterval(interval);
+        }
+      };
+    } else if (sessionTimer) {
+      clearInterval(sessionTimer);
+      setSessionTimer(null);
+    }
+  }, [isStudying, currentSession?.id]);
 
   useEffect(() => {
     fetchDashboardAndTimetables();
@@ -81,16 +117,13 @@ export const StudyProvider = ({ children }) => {
 
   const fetchCompletedSubjects = async () => {
     try {
-      // Use the dedicated today's sessions endpoint
       const res = await axios.get(`${API_URL}/api/study/sessions/today`);
-
       setStudyData(prev => ({
         ...prev,
         completedSubjects: res.data || []
       }));
     } catch (err) {
       console.error('Failed to fetch completed subjects:', err);
-      // If the API doesn't exist, we'll keep completedSubjects as empty array
       setStudyData(prev => ({
         ...prev,
         completedSubjects: []
@@ -98,7 +131,15 @@ export const StudyProvider = ({ children }) => {
     }
   };
 
-  // Additional helper function to fetch session statistics
+  // Save session state to backend
+  const saveSessionState = async (sessionData) => {
+    try {
+      await axios.post(`${API_URL}/api/study/state`, sessionData);
+    } catch (err) {
+      console.error('Failed to save session state:', err);
+    }
+  };
+
   const fetchSessionStats = async (period = 'week') => {
     try {
       const res = await axios.get(`${API_URL}/api/study/sessions/stats`, {
@@ -113,67 +154,100 @@ export const StudyProvider = ({ children }) => {
 
   const startStudySession = async (subject) => {
     const startTime = new Date();
+    const sessionData = {
+      id: Date.now().toString(), // Simple ID generation
+      currentSubject: subject,
+      elapsedTime: 0,
+      startTime,
+      status: 'active'
+    };
+
     try {
-      const res = await axios.post(`${API_URL}/api/study/state`, {
-        currentSubject: subject,
-        elapsedTime: 0,
-        startTime,
-        status: 'active'
-      });
-      setCurrentSession(res.data);
+      const res = await axios.post(`${API_URL}/api/study/state`, sessionData);
+      setCurrentSession(res.data || sessionData);
       setIsStudying(true);
     } catch (err) {
       console.error('Failed to start session:', err);
+      // Fallback to local state if API fails
+      setCurrentSession(sessionData);
+      setIsStudying(true);
     }
   };
 
   const pauseSession = async () => {
+    if (!currentSession) return;
+
+    const updatedSession = {
+      ...currentSession,
+      status: 'paused'
+    };
+
     try {
-      await axios.post(`${API_URL}/api/study/state`, {
-        ...currentSession,
-        status: 'paused'
-      });
-      setCurrentSession(prev => ({ ...prev, status: 'paused' }));
+      await saveSessionState(updatedSession);
+      setCurrentSession(updatedSession);
       setIsStudying(false);
     } catch (err) {
       console.error('Failed to pause session:', err);
+      // Still update local state even if API fails
+      setCurrentSession(updatedSession);
+      setIsStudying(false);
     }
   };
 
   const resumeSession = async () => {
+    if (!currentSession) return;
+
+    const updatedSession = {
+      ...currentSession,
+      status: 'active'
+    };
+
     try {
-      await axios.post(`${API_URL}/api/study/state`, {
-        ...currentSession,
-        status: 'active'
-      });
-      setCurrentSession(prev => ({ ...prev, status: 'active' }));
+      await saveSessionState(updatedSession);
+      setCurrentSession(updatedSession);
       setIsStudying(true);
     } catch (err) {
       console.error('Failed to resume session:', err);
+      // Still update local state even if API fails
+      setCurrentSession(updatedSession);
+      setIsStudying(true);
     }
   };
 
   const endSession = async ({ actualTime, notes = '', targetTime }) => {
+    if (!currentSession) return;
+
     try {
       const endTime = new Date();
+      const isCompleted = actualTime >= (targetTime * 60);
+
+      // Create session record
       await axios.post(`${API_URL}/api/study/sessions`, {
         subject: currentSession.currentSubject,
         actualTime,
-        targetTime,
+        targetTime: targetTime * 60, // Convert to seconds
         startTime: currentSession.startTime,
         endTime,
-        completed: true,
+        completed: isCompleted,
         notes
       });
+
+      // Clear session state
       await axios.delete(`${API_URL}/api/study/state`);
+
       setCurrentSession(null);
       setIsStudying(false);
 
       // Refresh data after ending session
-      fetchDashboardAndTimetables();
-      fetchCompletedSubjects();
+      await Promise.all([
+        fetchDashboardAndTimetables(),
+        fetchCompletedSubjects()
+      ]);
+
+      return { completed: isCompleted };
     } catch (err) {
       console.error('Failed to end session:', err);
+      throw err;
     }
   };
 
@@ -190,6 +264,45 @@ export const StudyProvider = ({ children }) => {
     }
   };
 
+  // Helper functions for subject status
+  const getSubjectStatus = (subject) => {
+    const completedSubjects = studyData.completedSubjects || [];
+    const completed = completedSubjects.find(s => s.subject === subject.subject);
+    if (!completed) return 'pending';
+
+    if (completed.completed) return 'completed';
+    return 'paused';
+  };
+
+  const getSubjectActualTime = (subject) => {
+    const completedSubjects = studyData.completedSubjects || [];
+    const completed = completedSubjects.find(s => s.subject === subject.subject);
+    return completed ? completed.actualTime : 0;
+  };
+
+  const getTodaySchedule = () => {
+    const activeTimetable = studyData.activeTimetable;
+    if (!activeTimetable) return [];
+
+    const todayKey = new Date().toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
+    return activeTimetable.schedule?.[todayKey] || [];
+  };
+
+  const getPendingSubjects = () => {
+    const todaySchedule = getTodaySchedule();
+    return todaySchedule.filter(subject => getSubjectStatus(subject) === 'pending');
+  };
+
+  const getPausedSubjects = () => {
+    const todaySchedule = getTodaySchedule();
+    return todaySchedule.filter(subject => getSubjectStatus(subject) === 'paused');
+  };
+
+  const getCompletedSubjects = () => {
+    const todaySchedule = getTodaySchedule();
+    return todaySchedule.filter(subject => getSubjectStatus(subject) === 'completed');
+  };
+
   const value = useMemo(() => ({
     studyData,
     currentSession,
@@ -203,7 +316,13 @@ export const StudyProvider = ({ children }) => {
     fetchCompletedSubjects,
     fetchSessionStats,
     fetchNotes,
-    loadingNotes
+    loadingNotes,
+    getSubjectStatus,
+    getSubjectActualTime,
+    getTodaySchedule,
+    getPendingSubjects,
+    getPausedSubjects,
+    getCompletedSubjects
   }), [studyData, currentSession, isStudying, loadingNotes]);
 
   return (

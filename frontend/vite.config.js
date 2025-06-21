@@ -11,7 +11,8 @@ export default defineConfig({
       manifest: {
         name: "Focus Vault - Study Companion",
         short_name: "Focus Vault",
-        description: "Your personal study companion - track progress, manage tasks, and stay motivated",
+        description:
+          "Your personal study companion - track progress, manage tasks, and stay motivated",
         theme_color: "#8B5CF6",
         background_color: "#1F2937",
         display: "standalone",
@@ -23,19 +24,19 @@ export default defineConfig({
             src: "pwa-192x192.png",
             sizes: "192x192",
             type: "image/png",
-            purpose: "any maskable"
+            purpose: "any maskable",
           },
           {
             src: "pwa-512x512.png",
             sizes: "512x512",
             type: "image/png",
-            purpose: "any maskable"
+            purpose: "any maskable",
           },
           {
             src: "apple-touch-icon.png",
             sizes: "180x180",
-            type: "image/png"
-          }
+            type: "image/png",
+          },
         ],
         categories: ["education", "productivity", "utilities"],
         screenshots: [
@@ -43,18 +44,20 @@ export default defineConfig({
             src: "screenshot-wide.png",
             sizes: "1280x720",
             type: "image/png",
-            form_factor: "wide"
+            form_factor: "wide",
           },
           {
-            src: "screenshot-narrow.png", 
+            src: "screenshot-narrow.png",
             sizes: "750x1334",
             type: "image/png",
-            form_factor: "narrow"
-          }
-        ]
+            form_factor: "narrow",
+          },
+        ],
       },
       workbox: {
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
+        cleanupOutdatedCaches: true,
+        skipWaiting: true,
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/api\.quotable\.io\/.*/i,
@@ -63,9 +66,9 @@ export default defineConfig({
               cacheName: "quotes-cache",
               expiration: {
                 maxEntries: 10,
-                maxAgeSeconds: 60 * 60 * 24 * 7 // 1 week
-              }
-            }
+                maxAgeSeconds: 60 * 60 * 24 * 7, // 1 week
+              },
+            },
           },
           {
             urlPattern: /^https:\/\/zenquotes\.io\/.*/i,
@@ -74,15 +77,16 @@ export default defineConfig({
               cacheName: "zenquotes-cache",
               expiration: {
                 maxEntries: 10,
-                maxAgeSeconds: 60 * 60 * 24 * 7 // 1 week
-              }
-            }
-          }
-        ]
+                maxAgeSeconds: 60 * 60 * 24 * 7, // 1 week
+              },
+            },
+          },
+        ],
       },
+      injectRegister: false,
       devOptions: {
-        enabled: true
-      }
+        enabled: true,
+      },
     }),
   ],
   optimizeDeps: {
