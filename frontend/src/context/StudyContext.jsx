@@ -24,10 +24,10 @@ export const StudyProvider = ({ children }) => {
     completedSubjects: []
   });
 
+  const [activeSessions, setActiveSessions] = useState([]);
   const [currentSession, setCurrentSession] = useState(null);
   const [isStudying, setIsStudying] = useState(false);
   const [loadingNotes, setLoadingNotes] = useState(false);
-  const [sessionTimer, setSessionTimer] = useState(null);
 
   const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
@@ -44,44 +44,9 @@ export const StudyProvider = ({ children }) => {
     }
   }, []);
 
-  // Timer management
-  useEffect(() => {
-    if (isStudying && currentSession) {
-      const interval = setInterval(() => {
-        setCurrentSession(prev => {
-          if (prev) {
-            const newElapsedTime = prev.elapsedTime + 1;
-            // Auto-save session state every 10 seconds
-            if (newElapsedTime % 10 === 0) {
-              saveSessionState({
-                ...prev,
-                elapsedTime: newElapsedTime
-              });
-            }
-            return {
-              ...prev,
-              elapsedTime: newElapsedTime
-            };
-          }
-          return prev;
-        });
-      }, 1000);
-
-      setSessionTimer(interval);
-      return () => {
-        if (interval) {
-          clearInterval(interval);
-        }
-      };
-    } else if (sessionTimer) {
-      clearInterval(sessionTimer);
-      setSessionTimer(null);
-    }
-  }, [isStudying, currentSession?.id]);
-
   useEffect(() => {
     fetchDashboardAndTimetables();
-    fetchCurrentSession();
+    fetchActiveSessions();
     fetchCompletedSubjects();
   }, []);
 
@@ -103,15 +68,22 @@ export const StudyProvider = ({ children }) => {
     }
   };
 
-  const fetchCurrentSession = async () => {
+  const fetchActiveSessions = async () => {
     try {
       const res = await axios.get(`${API_URL}/api/study/state`);
-      if (res.data?.currentSubject) {
-        setCurrentSession(res.data);
-        setIsStudying(res.data.status === 'active');
+      setActiveSessions(res.data || []);
+
+      // Set current session to the most recent active one
+      const activeSession = res.data.find(session => session.status === 'active');
+      if (activeSession) {
+        setCurrentSession(activeSession);
+        setIsStudying(true);
+      } else {
+        setCurrentSession(null);
+        setIsStudying(false);
       }
     } catch (err) {
-      console.error('Failed to fetch session state:', err);
+      console.error('Failed to fetch active sessions:', err);
     }
   };
 
@@ -131,20 +103,12 @@ export const StudyProvider = ({ children }) => {
     }
   };
 
-  // Save session state to backend
-  const saveSessionState = async (sessionData) => {
+  const fetchSessionStats = async (period = 'week', subject = null) => {
     try {
-      await axios.post(`${API_URL}/api/study/state`, sessionData);
-    } catch (err) {
-      console.error('Failed to save session state:', err);
-    }
-  };
+      const params = new URLSearchParams({ period });
+      if (subject) params.append('subject', subject);
 
-  const fetchSessionStats = async (period = 'week') => {
-    try {
-      const res = await axios.get(`${API_URL}/api/study/sessions/stats`, {
-        params: { period }
-      });
+      const res = await axios.get(`${API_URL}/api/study/sessions/stats?${params.toString()}`);
       return res.data;
     } catch (err) {
       console.error('Failed to fetch session stats:', err);
@@ -152,106 +116,157 @@ export const StudyProvider = ({ children }) => {
     }
   };
 
-  const startStudySession = async (subject) => {
-    const startTime = new Date();
-    const sessionData = {
-      id: Date.now().toString(), // Simple ID generation
-      currentSubject: subject,
-      elapsedTime: 0,
-      startTime,
-      status: 'active'
-    };
-
+  const startStudySession = async (subject, targetTime = 3600) => {
     try {
-      const res = await axios.post(`${API_URL}/api/study/state`, sessionData);
-      setCurrentSession(res.data || sessionData);
+      const res = await axios.post(`${API_URL}/api/study/state/start`, {
+        subject,
+        targetTime
+      });
+
+      const newSession = res.data;
+      setCurrentSession(newSession);
       setIsStudying(true);
+
+      // Update active sessions
+      setActiveSessions(prev => {
+        const filtered = prev.filter(s => s.subject !== subject);
+        return [newSession, ...filtered];
+      });
+
+      return newSession;
     } catch (err) {
       console.error('Failed to start session:', err);
-      // Fallback to local state if API fails
-      setCurrentSession(sessionData);
-      setIsStudying(true);
+      throw err;
     }
   };
 
-  const pauseSession = async () => {
-    if (!currentSession) return;
-
-    const updatedSession = {
-      ...currentSession,
-      status: 'paused'
-    };
-
+  const pauseSession = async (sessionId = null) => {
     try {
-      await saveSessionState(updatedSession);
+      const targetSessionId = sessionId || currentSession?.sessionId;
+      if (!targetSessionId) return;
+
+      const res = await axios.put(`${API_URL}/api/study/state/${targetSessionId}`, {
+        status: 'paused'
+      });
+
+      const updatedSession = res.data;
       setCurrentSession(updatedSession);
       setIsStudying(false);
+
+      // Update active sessions
+      setActiveSessions(prev =>
+        prev.map(s => s.sessionId === targetSessionId ? updatedSession : s)
+      );
+
+      return updatedSession;
     } catch (err) {
       console.error('Failed to pause session:', err);
-      // Still update local state even if API fails
-      setCurrentSession(updatedSession);
-      setIsStudying(false);
+      throw err;
     }
   };
 
-  const resumeSession = async () => {
-    if (!currentSession) return;
-
-    const updatedSession = {
-      ...currentSession,
-      status: 'active'
-    };
-
+  const resumeSession = async (sessionId = null) => {
     try {
-      await saveSessionState(updatedSession);
+      const targetSessionId = sessionId || currentSession?.sessionId;
+      if (!targetSessionId) return;
+
+      const res = await axios.put(`${API_URL}/api/study/state/${targetSessionId}`, {
+        status: 'active'
+      });
+
+      const updatedSession = res.data;
       setCurrentSession(updatedSession);
       setIsStudying(true);
+
+      // Update active sessions
+      setActiveSessions(prev =>
+        prev.map(s => s.sessionId === targetSessionId ? updatedSession : s)
+      );
+
+      return updatedSession;
     } catch (err) {
       console.error('Failed to resume session:', err);
-      // Still update local state even if API fails
-      setCurrentSession(updatedSession);
-      setIsStudying(true);
+      throw err;
     }
   };
 
-  const endSession = async ({ actualTime, notes = '', targetTime }) => {
-    if (!currentSession) return;
-
+  const updateSessionTime = async (sessionId, elapsedTime) => {
     try {
-      const endTime = new Date();
-      const isCompleted = actualTime >= (targetTime * 60);
+      const res = await axios.put(`${API_URL}/api/study/state/${sessionId}`, {
+        elapsedTime
+      });
 
-      // Create session record
-      await axios.post(`${API_URL}/api/study/sessions`, {
-        subject: currentSession.currentSubject,
-        actualTime,
-        targetTime: targetTime * 60, // Convert to seconds
-        startTime: currentSession.startTime,
-        endTime,
-        completed: isCompleted,
+      const updatedSession = res.data;
+      if (currentSession?.sessionId === sessionId) {
+        setCurrentSession(updatedSession);
+      }
+
+      // Update active sessions
+      setActiveSessions(prev =>
+        prev.map(s => s.sessionId === sessionId ? updatedSession : s)
+      );
+
+      return updatedSession;
+    } catch (err) {
+      console.error('Failed to update session time:', err);
+      throw err;
+    }
+  };
+
+  const endSession = async (sessionId = null, notes = '') => {
+    try {
+      const targetSessionId = sessionId || currentSession?.sessionId;
+      if (!targetSessionId) return;
+
+      await axios.post(`${API_URL}/api/study/state/${targetSessionId}/end`, {
         notes
       });
 
-      // Clear session state
-      await axios.delete(`${API_URL}/api/study/state`);
+      // Clear current session if it was the one ended
+      if (currentSession?.sessionId === targetSessionId) {
+        setCurrentSession(null);
+        setIsStudying(false);
+      }
 
-      setCurrentSession(null);
-      setIsStudying(false);
+      // Remove from active sessions
+      setActiveSessions(prev =>
+        prev.filter(s => s.sessionId !== targetSessionId)
+      );
 
-      // Refresh data after ending session
+      // Refresh data
       await Promise.all([
         fetchDashboardAndTimetables(),
         fetchCompletedSubjects()
       ]);
 
-      return { completed: isCompleted };
     } catch (err) {
       console.error('Failed to end session:', err);
       throw err;
     }
   };
 
-  const fetchNotes = async (search = '', subject = '', page = 1, limit = 20) => {
+  const cancelSession = async (sessionId) => {
+    try {
+      await axios.delete(`${API_URL}/api/study/state/${sessionId}`);
+
+      // Clear current session if it was the one cancelled
+      if (currentSession?.sessionId === sessionId) {
+        setCurrentSession(null);
+        setIsStudying(false);
+      }
+
+      // Remove from active sessions
+      setActiveSessions(prev =>
+        prev.filter(s => s.sessionId !== sessionId)
+      );
+
+    } catch (err) {
+      console.error('Failed to cancel session:', err);
+      throw err;
+    }
+  };
+
+  const fetchNotes = async (search = '', subject = '', page = 1, limit = 10) => {
     try {
       setLoadingNotes(true);
       const params = new URLSearchParams({ search, subject, page, limit });
@@ -264,66 +279,47 @@ export const StudyProvider = ({ children }) => {
     }
   };
 
-  // Helper functions for subject status
-  const getSubjectStatus = (subject) => {
-    const completedSubjects = studyData.completedSubjects || [];
-    const completed = completedSubjects.find(s => s.subject === subject.subject);
-    if (!completed) return 'pending';
-
-    if (completed.completed) return 'completed';
-    return 'paused';
+  // Helper functions for UI
+  const getPausedSessions = () => {
+    return activeSessions.filter(session => session.status === 'paused');
   };
 
-  const getSubjectActualTime = (subject) => {
-    const completedSubjects = studyData.completedSubjects || [];
-    const completed = completedSubjects.find(s => s.subject === subject.subject);
-    return completed ? completed.actualTime : 0;
+  const getActiveSession = () => {
+    return activeSessions.find(session => session.status === 'active');
   };
 
-  const getTodaySchedule = () => {
-    const activeTimetable = studyData.activeTimetable;
-    if (!activeTimetable) return [];
-
-    const todayKey = new Date().toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
-    return activeTimetable.schedule?.[todayKey] || [];
-  };
-
-  const getPendingSubjects = () => {
-    const todaySchedule = getTodaySchedule();
-    return todaySchedule.filter(subject => getSubjectStatus(subject) === 'pending');
-  };
-
-  const getPausedSubjects = () => {
-    const todaySchedule = getTodaySchedule();
-    return todaySchedule.filter(subject => getSubjectStatus(subject) === 'paused');
-  };
-
-  const getCompletedSubjects = () => {
-    const todaySchedule = getTodaySchedule();
-    return todaySchedule.filter(subject => getSubjectStatus(subject) === 'completed');
+  const getSessionBySubject = (subject) => {
+    return activeSessions.find(session => session.subject === subject);
   };
 
   const value = useMemo(() => ({
     studyData,
+    activeSessions,
     currentSession,
     isStudying,
     startStudySession,
     pauseSession,
     resumeSession,
+    updateSessionTime,
     endSession,
+    cancelSession,
     fetchDashboardAndTimetables,
-    fetchCurrentSession,
+    fetchActiveSessions,
     fetchCompletedSubjects,
     fetchSessionStats,
     fetchNotes,
     loadingNotes,
-    getSubjectStatus,
-    getSubjectActualTime,
-    getTodaySchedule,
-    getPendingSubjects,
-    getPausedSubjects,
-    getCompletedSubjects
-  }), [studyData, currentSession, isStudying, loadingNotes]);
+    // Helper functions
+    getPausedSessions,
+    getActiveSession,
+    getSessionBySubject,
+  }), [
+    studyData,
+    activeSessions,
+    currentSession,
+    isStudying,
+    loadingNotes
+  ]);
 
   return (
     <StudyContext.Provider value={value}>

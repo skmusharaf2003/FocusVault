@@ -121,7 +121,7 @@ const ChatRoom = () => {
                 className="w-full pl-10 pr-4 py-3 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-800 dark:text-white"
               />
             </div>
-            
+
             <motion.button
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
@@ -246,11 +246,10 @@ const ChatRoom = () => {
                     <span className="text-white font-bold text-xs">{msg.avatar}</span>
                   </div>
                   <div>
-                    <div className={`px-4 py-2 rounded-2xl ${
-                      msg.isOwn 
-                        ? 'bg-gradient-to-r from-primary-600 to-secondary-600 text-white' 
+                    <div className={`px-4 py-2 rounded-2xl ${msg.isOwn
+                        ? 'bg-gradient-to-r from-primary-600 to-secondary-600 text-white'
                         : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-white'
-                    }`}>
+                      }`}>
                       <p className="text-sm">{msg.message}</p>
                     </div>
                     <div className={`flex items-center mt-1 text-xs text-gray-500 dark:text-gray-400 ${msg.isOwn ? 'justify-end' : 'justify-start'}`}>

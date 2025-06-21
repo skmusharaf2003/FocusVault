@@ -4,6 +4,7 @@ import Timetable from "../models/Timetable.js";
 import Note from "../models/Note.js";
 import User from "../models/User.js";
 import UserStudyState from "../models/UserStudyState.js";
+import { v4 as uuidv4 } from "uuid";
 
 const router = express.Router();
 
@@ -28,7 +29,7 @@ router.get("/dashboard", async (req, res) => {
     // Get today's study sessions
     const todaySessions = await StudySession.find({
       userId,
-      date: { $gte: today, $lt: tomorrow },
+      createdAt: { $gte: today, $lt: tomorrow },
     });
 
     // Get user stats
@@ -40,7 +41,7 @@ router.get("/dashboard", async (req, res) => {
 
     const weeklySessions = await StudySession.find({
       userId,
-      date: { $gte: weekStart, $lt: tomorrow },
+      createdAt: { $gte: weekStart, $lt: tomorrow },
     });
 
     // Calculate daily totals for the week
@@ -53,11 +54,11 @@ router.get("/dashboard", async (req, res) => {
       dayEnd.setDate(dayEnd.getDate() + 1);
 
       const daySessions = weeklySessions.filter(
-        (session) => session.date >= dayStart && session.date < dayEnd
+        (session) => session.createdAt >= dayStart && session.createdAt < dayEnd
       );
 
       const totalMinutes = daySessions.reduce(
-        (sum, session) => sum + session.actualTime,
+        (sum, session) => sum + (session.actualTime || 0),
         0
       );
 
@@ -71,11 +72,13 @@ router.get("/dashboard", async (req, res) => {
     const dashboardData = {
       todayReading:
         Math.round(
-          (todaySessions.reduce((sum, s) => sum + s.actualTime, 0) / 60) * 10
+          (todaySessions.reduce((sum, s) => sum + (s.actualTime || 0), 0) /
+            60) *
+            10
         ) / 10,
       studySessions: todaySessions.length,
-      currentStreak: user.stats.currentStreak,
-      highestStreak: user.stats.highestStreak,
+      currentStreak: user?.stats?.currentStreak || 0,
+      highestStreak: user?.stats?.highestStreak || 0,
       weeklyData,
       completedSubjects: todaySessions.filter((s) => s.completed),
     };
@@ -89,6 +92,229 @@ router.get("/dashboard", async (req, res) => {
     res.status(500).json({ message: "Failed to fetch dashboard data" });
   }
 });
+
+// Get all active and paused sessions for user
+router.get("/state", async (req, res) => {
+  try {
+    const userId = req.userId;
+    const activeSessions = await UserStudyState.find({
+      userId,
+      status: { $in: ["active", "paused"] },
+    }).sort({ lastActiveAt: -1 });
+
+    res.json(activeSessions);
+  } catch (error) {
+    console.error("Get study state error:", error);
+    res.status(500).json({ message: "Failed to fetch study state" });
+  }
+});
+
+// Get specific session by sessionId
+router.get("/state/:sessionId", async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const userId = req.userId;
+
+    const session = await UserStudyState.findOne({
+      userId,
+      sessionId,
+      status: { $in: ["active", "paused"] },
+    });
+
+    if (!session) {
+      return res.status(404).json({ message: "Session not found" });
+    }
+
+    res.json(session);
+  } catch (error) {
+    console.error("Get session error:", error);
+    res.status(500).json({ message: "Failed to fetch session" });
+  }
+});
+
+// Start new study session
+router.post("/state/start", async (req, res) => {
+  try {
+    const { subject, targetTime = 3600 } = req.body;
+    const userId = req.userId;
+
+    if (!subject) {
+      return res.status(400).json({ message: "Subject is required" });
+    }
+
+    // Check if there's already an active session for this subject
+    const existingSession = await UserStudyState.findOne({
+      userId,
+      subject,
+      status: { $in: ["active", "paused"] },
+    });
+
+    if (existingSession) {
+      // Resume existing session
+      existingSession.status = "active";
+      existingSession.lastActiveAt = new Date();
+      await existingSession.save();
+      return res.json(existingSession);
+    }
+
+    // Create new session
+    const sessionId = uuidv4();
+    const newSession = new UserStudyState({
+      userId,
+      subject,
+      targetTime,
+      sessionId,
+      status: "active",
+      startTime: new Date(),
+      lastActiveAt: new Date(),
+    });
+
+    await newSession.save();
+    res.status(201).json(newSession);
+  } catch (error) {
+    console.error("Start session error:", error);
+    res.status(500).json({ message: "Failed to start session" });
+  }
+});
+
+// Update session (pause/resume/update time)
+router.put("/state/:sessionId", async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const { status, elapsedTime, notes } = req.body;
+    const userId = req.userId;
+
+    const session = await UserStudyState.findOne({
+      userId,
+      sessionId,
+      status: { $in: ["active", "paused"] },
+    });
+
+    if (!session) {
+      return res.status(404).json({ message: "Session not found" });
+    }
+
+    if (status) session.status = status;
+    if (elapsedTime !== undefined) session.elapsedTime = elapsedTime;
+    if (notes !== undefined) session.notes = notes;
+    session.lastActiveAt = new Date();
+
+    await session.save();
+    res.json(session);
+  } catch (error) {
+    console.error("Update session error:", error);
+    res.status(500).json({ message: "Failed to update session" });
+  }
+});
+
+// End session and create StudySession record
+router.post("/state/:sessionId/end", async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const { notes = "" } = req.body;
+    const userId = req.userId;
+
+    const session = await UserStudyState.findOne({
+      userId,
+      sessionId,
+      status: { $in: ["active", "paused"] },
+    });
+
+    if (!session) {
+      return res.status(404).json({ message: "Session not found" });
+    }
+
+    // Create StudySession record
+    const studySession = new StudySession({
+      userId,
+      subject: session.subject,
+      actualTime: session.elapsedTime,
+      targetTime: session.targetTime,
+      startTime: session.startTime,
+      endTime: new Date(),
+      completed: true,
+      notes: notes || session.notes,
+    });
+
+    await studySession.save();
+
+    // Remove from UserStudyState
+    await UserStudyState.deleteOne({ _id: session._id });
+
+    // Update user stats
+    await updateUserStats(userId, session.elapsedTime);
+
+    res.json({
+      message: "Session completed successfully",
+      studySession,
+    });
+  } catch (error) {
+    console.error("End session error:", error);
+    res.status(500).json({ message: "Failed to end session" });
+  }
+});
+
+// Delete/cancel session
+router.delete("/state/:sessionId", async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const userId = req.userId;
+
+    const result = await UserStudyState.deleteOne({
+      userId,
+      sessionId,
+    });
+
+    if (result.deletedCount === 0) {
+      return res.status(404).json({ message: "Session not found" });
+    }
+
+    res.json({ message: "Session cancelled successfully" });
+  } catch (error) {
+    console.error("Delete session error:", error);
+    res.status(500).json({ message: "Failed to cancel session" });
+  }
+});
+
+// Helper function to update user stats
+async function updateUserStats(userId, sessionTime) {
+  try {
+    const user = await User.findById(userId);
+    if (!user) return;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Update total study time
+    user.stats.totalStudyTime = (user.stats.totalStudyTime || 0) + sessionTime;
+
+    // Update streak
+    const lastStudyDate = user.stats.lastStudyDate;
+    if (!lastStudyDate || lastStudyDate < today) {
+      const yesterday = new Date(today);
+      yesterday.setDate(yesterday.getDate() - 1);
+
+      if (lastStudyDate && lastStudyDate >= yesterday) {
+        // Consecutive day
+        user.stats.currentStreak = (user.stats.currentStreak || 0) + 1;
+      } else {
+        // New streak
+        user.stats.currentStreak = 1;
+      }
+
+      user.stats.lastStudyDate = today;
+
+      // Update highest streak
+      if (user.stats.currentStreak > (user.stats.highestStreak || 0)) {
+        user.stats.highestStreak = user.stats.currentStreak;
+      }
+    }
+
+    await user.save();
+  } catch (error) {
+    console.error("Update user stats error:", error);
+  }
+}
 
 router.get("/sessions", async (req, res) => {
   try {
@@ -152,7 +378,7 @@ router.get("/sessions/today", async (req, res) => {
 router.get("/sessions/stats", async (req, res) => {
   try {
     const userId = req.userId;
-    const { period = "week" } = req.query;
+    const { period = "week", subject, filter } = req.query;
 
     let startDate = new Date();
     switch (period) {
@@ -167,10 +393,16 @@ router.get("/sessions/stats", async (req, res) => {
         startDate.setDate(startDate.getDate() - 7);
     }
 
-    const sessions = await StudySession.find({
+    const query = {
       userId,
       createdAt: { $gte: startDate },
-    }).sort({ createdAt: 1 });
+    };
+
+    if (subject) {
+      query.subject = subject;
+    }
+
+    const sessions = await StudySession.find(query).sort({ createdAt: 1 });
 
     const totalSessions = sessions.length;
     const totalStudyTime = sessions.reduce(
@@ -271,7 +503,7 @@ router.put("/sessions/:id", async (req, res) => {
     const { id } = req.params;
     const { subject, actualTime, startTime, endTime, completed, notes } =
       req.body;
-    const userId = req.user.id;
+    const userId = req.userId;
 
     const session = await StudySession.findOne({ _id: id, userId });
 
@@ -299,7 +531,7 @@ router.put("/sessions/:id", async (req, res) => {
 router.delete("/sessions/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    const userId = req.user.id;
+    const userId = req.userId;
 
     const session = await StudySession.findOne({ _id: id, userId });
     if (!session) {
@@ -459,7 +691,7 @@ router.put("/timetables/:id", async (req, res) => {
 // Get notes
 router.get("/notes", async (req, res) => {
   try {
-    const { search, subject, page = 1, limit = 20 } = req.query;
+    const { search, subject, page = 1, limit = 10 } = req.query;
     const query = { userId: req.userId };
 
     if (search) query.$text = { $search: search };
@@ -536,39 +768,6 @@ router.delete("/notes/:id", async (req, res) => {
     console.error("Delete note error:", error);
     res.status(500).json({ message: "Failed to delete note" });
   }
-});
-
-// Get user study state
-
-router.get("/state", async (req, res) => {
-  const state = await UserStudyState.findOne({ userId: req.userId });
-  res.json(state || {});
-});
-
-// Update or create state
-router.post("/state", async (req, res) => {
-  const { currentSubject, elapsedTime, startTime, status } = req.body;
-  const update = {
-    currentSubject,
-    elapsedTime,
-    startTime,
-    status,
-    updatedAt: new Date(),
-  };
-
-  const state = await UserStudyState.findOneAndUpdate(
-    { userId: req.userId },
-    update,
-    { upsert: true, new: true }
-  );
-
-  res.json(state);
-});
-
-// Clear state on completion
-router.delete("/state", async (req, res) => {
-  await UserStudyState.deleteOne({ userId: req.userId });
-  res.status(204).end();
 });
 
 export default router;
