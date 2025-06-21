@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Play, Pause, Square, Clock, Target, Book, CheckCircle, PauseCircle, Save } from 'lucide-react';
+import { Play, Pause, Square, Clock, Target, Book, CheckCircle, PauseCircle, Save, ArrowRight, Home } from 'lucide-react';
 import { useStudy } from '../../context/StudyContext';
 
 const StudyTimer = () => {
@@ -19,12 +19,13 @@ const StudyTimer = () => {
   const [elapsedTime, setElapsedTime] = useState(0);
   const [sessionNotes, setSessionNotes] = useState('');
   const [showNotes, setShowNotes] = useState(false);
+  const [showCompletion, setShowCompletion] = useState(false);
+  const [nextSuggestions, setNextSuggestions] = useState([]);
 
   const getTodayKey = () =>
     new Date().toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
 
   useEffect(() => {
-    // Fetch data when component mounts
     fetchDashboardAndTimetables();
   }, []);
 
@@ -69,11 +70,26 @@ const StudyTimer = () => {
     return activeTimetable.schedule?.[todayKey] || [];
   };
 
+  const getNextSuggestions = (completedSubject) => {
+    const todaySchedule = getTodaySchedule();
+    const completedSubjects = studyData.completedSubjects || [];
+    
+    const remaining = todaySchedule.filter(subject =>
+      subject.subject !== completedSubject &&
+      !completedSubjects.some(completed =>
+        completed.subject === subject.subject && completed.completed
+      )
+    );
+
+    return remaining.slice(0, 3); // Show max 3 suggestions
+  };
+
   const handleStartSession = async () => {
     if (selectedSubject) {
       await startStudySession(selectedSubject);
       setElapsedTime(0);
       setSessionNotes('');
+      setShowCompletion(false);
     }
   };
 
@@ -86,25 +102,41 @@ const StudyTimer = () => {
   };
 
   const handleEndSession = async () => {
+    const targetTime = getSubjectDuration(currentSession.currentSubject);
+    const isCompleted = elapsedTime >= (targetTime * 60);
+    
     await endSession({
       actualTime: elapsedTime,
-      targetTime: getSubjectDuration(currentSession.currentSubject),
+      targetTime: targetTime,
       notes: sessionNotes
     });
+
+    if (isCompleted) {
+      const suggestions = getNextSuggestions(currentSession.currentSubject);
+      setNextSuggestions(suggestions);
+      setShowCompletion(true);
+    }
+
     setElapsedTime(0);
     setSessionNotes('');
     setShowNotes(false);
   };
 
-  const handleSaveNotes = () => {
-    // Notes are saved when ending session
-    setShowNotes(false);
+  const handleExitReading = () => {
+    setShowCompletion(false);
+    setNextSuggestions([]);
+  };
+
+  const handleStartNextSubject = (subject) => {
+    setSelectedSubject(subject.subject);
+    setShowCompletion(false);
+    handleStartSession();
   };
 
   // Get today's schedule
   const todaySchedule = getTodaySchedule();
 
-  // Get completed subjects from context (assuming it contains today's completed sessions)
+  // Get completed subjects from context
   const completedSubjects = studyData.completedSubjects || [];
 
   const progress = currentSession ? (elapsedTime / (getSubjectDuration(currentSession.currentSubject) * 60)) * 100 : 0;
@@ -129,6 +161,97 @@ const StudyTimer = () => {
     const completed = completedSubjects.find(s => s.subject === subject.subject);
     return completed ? completed.actualTime : 0;
   };
+
+  // Show completion screen
+  if (showCompletion) {
+    return (
+      <motion.div
+        initial={{ scale: 0.95, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        className="space-y-6"
+      >
+        <div className="bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/20 rounded-2xl p-6 text-center">
+          <motion.div
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            transition={{ delay: 0.2, type: "spring" }}
+            className="w-20 h-20 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-4"
+          >
+            <CheckCircle className="text-white" size={40} />
+          </motion.div>
+          
+          <h3 className="text-2xl font-bold text-green-700 dark:text-green-400 mb-2">
+            Great Job! 🎉
+          </h3>
+          <p className="text-green-600 dark:text-green-300 mb-6">
+            You've completed your study session successfully!
+          </p>
+
+          {nextSuggestions.length > 0 && (
+            <div className="mb-6">
+              <h4 className="text-lg font-semibold text-gray-800 dark:text-white mb-4">
+                Continue with these subjects:
+              </h4>
+              <div className="space-y-3">
+                {nextSuggestions.map((subject, index) => (
+                  <motion.button
+                    key={subject.subject}
+                    initial={{ x: -20, opacity: 0 }}
+                    animate={{ x: 0, opacity: 1 }}
+                    transition={{ delay: 0.3 + (index * 0.1) }}
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => handleStartNextSubject(subject)}
+                    className="w-full bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700 flex items-center justify-between hover:border-primary-300 dark:hover:border-primary-600 transition-colors"
+                  >
+                    <div className="flex items-center space-x-3">
+                      <div className="w-10 h-10 bg-gradient-to-br from-primary-500 to-secondary-500 rounded-lg flex items-center justify-center">
+                        <span className="text-white font-bold text-sm">
+                          {subject.subject.charAt(0)}
+                        </span>
+                      </div>
+                      <div className="text-left">
+                        <p className="font-medium text-gray-800 dark:text-white">
+                          {subject.subject}
+                        </p>
+                        <p className="text-sm text-gray-600 dark:text-gray-300">
+                          {subject.time} • {subject.duration} min
+                        </p>
+                      </div>
+                    </div>
+                    <ArrowRight className="text-primary-600" size={20} />
+                  </motion.button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="flex space-x-3">
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={handleExitReading}
+              className="flex-1 bg-gray-500 text-white py-3 rounded-xl font-medium flex items-center justify-center space-x-2"
+            >
+              <Home size={20} />
+              <span>Exit Reading</span>
+            </motion.button>
+            
+            {nextSuggestions.length === 0 && (
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => window.location.href = '/'}
+                className="flex-1 bg-gradient-to-r from-primary-600 to-secondary-600 text-white py-3 rounded-xl font-medium"
+              >
+                Go to Dashboard
+              </motion.button>
+            )}
+          </div>
+        </div>
+      </motion.div>
+    );
+  }
 
   if (currentSession) {
     const targetTime = getSubjectDuration(currentSession.currentSubject) * 60;
@@ -238,7 +361,7 @@ const StudyTimer = () => {
                 className="w-full h-24 p-3 border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white resize-none"
               />
               <button
-                onClick={handleSaveNotes}
+                onClick={() => setShowNotes(false)}
                 className="mt-2 bg-green-500 text-white px-4 py-2 rounded-lg flex items-center space-x-2"
               >
                 <Save size={16} />

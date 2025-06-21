@@ -7,13 +7,15 @@ import ReadingSpace from './pages/ReadingSpace';
 import Todo from './pages/Todo';
 import Calendar from './pages/Calendar';
 import Profile from './pages/Profile';
+import Help from './pages/Help';
+import AboutUs from './pages/AboutUs';
 import Login from './pages/auth/Login';
 import Register from './pages/auth/Register';
 import LoadingScreen from './components/ui/LoadingScreen';
 
 function App() {
   const { user, loading } = useAuth();
-  console.log('User in App:', user);
+  
   if (loading) {
     return <LoadingScreen />;
   }
@@ -28,6 +30,8 @@ function App() {
             <Route path="/todo" element={<Todo />} />
             <Route path="/calendar" element={<Calendar />} />
             <Route path="/profile" element={<Profile />} />
+            <Route path="/help" element={<Help />} />
+            <Route path="/about" element={<AboutUs />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         ) : (

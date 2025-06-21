@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { User, Edit2, Save, X, Camera, Settings, Bell, Moon, Sun, Shield, LogOut, Trash2, BookOpen } from 'lucide-react';
+import { User, Edit2, Save, X, Camera, Settings, Bell, Moon, Sun, Shield, LogOut, Trash2, BookOpen, HelpCircle, Info } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { Link } from 'react-router-dom';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 
@@ -10,6 +11,7 @@ const Profile = () => {
   const [activeTab, setActiveTab] = useState('profile');
   const [isEditing, setIsEditing] = useState(false);
   const [editingTimetableId, setEditingTimetableId] = useState(null);
+  const [darkMode, setDarkMode] = useState(false);
   const [profileData, setProfileData] = useState({
     name: '',
     email: '',
@@ -40,7 +42,8 @@ const Profile = () => {
     { id: 'profile', label: 'Profile', icon: User },
     { id: 'settings', label: 'Settings', icon: Settings },
     { id: 'study', label: 'Study Settings', icon: BookOpen },
-    { id: 'security', label: 'Security', icon: Shield }
+    { id: 'security', label: 'Security', icon: Shield },
+    { id: 'help', label: 'Help & About', icon: HelpCircle }
   ];
 
   const studyTimes = [
@@ -76,7 +79,31 @@ const Profile = () => {
       setPreferences(user.preferences || preferences);
     }
     fetchTimetables();
+    
+    // Initialize dark mode from localStorage or system preference
+    const savedTheme = localStorage.getItem('theme');
+    const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const isDark = savedTheme === 'dark' || (!savedTheme && systemDark);
+    setDarkMode(isDark);
+    updateTheme(isDark);
   }, [user]);
+
+  const updateTheme = (isDark) => {
+    if (isDark) {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('theme', 'dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('theme', 'light');
+    }
+  };
+
+  const toggleDarkMode = () => {
+    const newDarkMode = !darkMode;
+    setDarkMode(newDarkMode);
+    updateTheme(newDarkMode);
+    setPreferences(prev => ({ ...prev, theme: newDarkMode ? 'dark' : 'light' }));
+  };
 
   const handleImageUpload = async (e) => {
     const file = e.target.files?.[0];
@@ -119,7 +146,7 @@ const Profile = () => {
       const imageUrl = data.secure_url;
 
       // Update backend with new image URL
-      const token = localStorage.getItem('token'); // Assuming token is stored in localStorage
+      const token = localStorage.getItem('token');
       await axios.put(
         `${API_URL}/api/user/profile`,
         { profileImage: imageUrl },
@@ -462,36 +489,24 @@ const Profile = () => {
         <div className="space-y-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
-              {preferences.theme === 'dark' ? <Moon size={20} /> : <Sun size={20} />}
+              {darkMode ? <Moon size={20} /> : <Sun size={20} />}
               <div>
-                <p className="font-medium text-gray-800 dark:text-white">Theme</p>
-                <p className="text-sm text-gray-600 dark:text-gray-300">Choose your preferred theme</p>
+                <p className="font-medium text-gray-800 dark:text-white">Dark Mode</p>
+                <p className="text-sm text-gray-600 dark:text-gray-300">Toggle between light and dark theme</p>
               </div>
             </div>
-            <div className="flex bg-gray-100 dark:bg-gray-700 rounded-xl p-1">
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={() => setPreferences({ ...preferences, theme: 'light' })}
-                className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${preferences.theme === 'light'
-                  ? 'bg-white dark:bg-gray-600 text-gray-800 dark:text-white shadow-sm'
-                  : 'text-gray-600 dark:text-gray-300'
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={toggleDarkMode}
+              className={`w-12 h-6 rounded-full transition-all ${darkMode ? 'bg-primary-600' : 'bg-gray-300 dark:bg-gray-600'
+                }`}
+            >
+              <div
+                className={`w-5 h-5 bg-white rounded-full transition-all ${darkMode ? 'translate-x-6' : 'translate-x-0.5'
                   }`}
-              >
-                Light
-              </motion.button>
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={() => setPreferences({ ...preferences, theme: 'dark' })}
-                className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${preferences.theme === 'dark'
-                  ? 'bg-white dark:bg-gray-600 text-gray-800 dark:text-white shadow-sm'
-                  : 'text-gray-600 dark:text-gray-300'
-                  }`}
-              >
-                Dark
-              </motion.button>
-            </div>
+              />
+            </motion.button>
           </div>
 
           <div className="flex items-center justify-between">
@@ -865,6 +880,72 @@ const Profile = () => {
     </div>
   );
 
+  const renderHelpTab = () => (
+    <div className="space-y-6">
+      <motion.div
+        initial={{ y: 20, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        className="bg-white dark:bg-gray-800 rounded-2xl p-6 border border-gray-100 dark:border-gray-700"
+      >
+        <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-4">Help & Support</h3>
+        
+        <div className="space-y-4">
+          <Link
+            to="/help"
+            className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
+          >
+            <div className="flex items-center space-x-3">
+              <HelpCircle className="text-primary-600" size={20} />
+              <div>
+                <h4 className="font-medium text-gray-800 dark:text-white">Help Center</h4>
+                <p className="text-sm text-gray-600 dark:text-gray-300">FAQs and user guides</p>
+              </div>
+            </div>
+            <span className="text-gray-400">→</span>
+          </Link>
+
+          <Link
+            to="/about"
+            className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
+          >
+            <div className="flex items-center space-x-3">
+              <Info className="text-primary-600" size={20} />
+              <div>
+                <h4 className="font-medium text-gray-800 dark:text-white">About Focus Vault</h4>
+                <p className="text-sm text-gray-600 dark:text-gray-300">Learn more about our mission</p>
+              </div>
+            </div>
+            <span className="text-gray-400">→</span>
+          </Link>
+        </div>
+      </motion.div>
+
+      <motion.div
+        initial={{ y: 20, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ delay: 0.1 }}
+        className="bg-gradient-to-br from-primary-50 to-secondary-50 dark:from-primary-900/20 dark:to-secondary-900/20 rounded-2xl p-6 border border-primary-200 dark:border-primary-800"
+      >
+        <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-4">App Information</h3>
+        
+        <div className="space-y-3 text-sm">
+          <div className="flex justify-between">
+            <span className="text-gray-600 dark:text-gray-300">Version</span>
+            <span className="font-medium text-gray-800 dark:text-white">1.0.0</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-gray-600 dark:text-gray-300">Last Updated</span>
+            <span className="font-medium text-gray-800 dark:text-white">January 2025</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-gray-600 dark:text-gray-300">Platform</span>
+            <span className="font-medium text-gray-800 dark:text-white">Progressive Web App</span>
+          </div>
+        </div>
+      </motion.div>
+    </div>
+  );
+
   return (
     <div className="space-y-6 animate-fade-in">
       <motion.div
@@ -912,6 +993,7 @@ const Profile = () => {
         {activeTab === 'settings' && renderSettingsTab()}
         {activeTab === 'study' && renderStudyTab()}
         {activeTab === 'security' && renderSecurityTab()}
+        {activeTab === 'help' && renderHelpTab()}
       </div>
     </div>
   );
