@@ -9,6 +9,8 @@ import { createServer } from "http";
 import { Server } from "socket.io";
 import redis from "redis";
 import passport from "./config/passport.js";
+import jwt from "jsonwebtoken";
+dotenv.config();
 
 // Import routes
 import authRoutes from "./routes/auth.js";
@@ -49,7 +51,12 @@ redisClient.on("error", (err) => {
   console.log("Redis Client Error", err);
 });
 
+redisClient.on("ready", () => {
+  console.log("✅ Connected to Upstash Redis");
+});
+
 await redisClient.connect();
+await redisClient.set("foo", "bar");
 
 // Middleware
 app.use(helmet());
@@ -64,7 +71,7 @@ app.use(
 // Rate limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
+  max: 200, // limit each IP to 100 requests per windowMs
 });
 app.use(limiter);
 
@@ -94,7 +101,12 @@ const notificationService = new NotificationService(io);
 app.use("/api/auth", authRoutes);
 app.use("/api/study", authMiddleware, requireEmailVerification, studyRoutes);
 app.use("/api/todo", authMiddleware, requireEmailVerification, todoRoutes);
-app.use("/api/calendar", authMiddleware, requireEmailVerification, calendarRoutes);
+app.use(
+  "/api/calendar",
+  authMiddleware,
+  requireEmailVerification,
+  calendarRoutes
+);
 app.use("/api/user", authMiddleware, userRoutes);
 app.use("/api/chat", chatRoutes);
 
@@ -103,34 +115,43 @@ app.get("/api/health", (req, res) => {
   res.json({ status: "OK", timestamp: new Date().toISOString() });
 });
 
-// Socket.IO for real-time features
 const activeUsers = new Map(); // userId -> socketId
 const chatRooms = new Map(); // roomId -> Set of user objects
 
 io.use(async (socket, next) => {
   try {
     const token = socket.handshake.auth.token;
+    // console.log("Received token:", token);
+
     if (!token) {
-      return next(new Error('Authentication error'));
+      // console.error("No token provided");
+      return next(new Error("Authentication error"));
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback_secret');
+    const decoded = jwt.verify(
+      token,
+      process.env.JWT_SECRET || "fallback_secret"
+    );
+    // console.log("Decoded JWT:", decoded);
+
     const user = await User.findById(decoded.userId);
-    
     if (!user) {
-      return next(new Error('User not found'));
+      console.error("User not found");
+      return next(new Error("User not found"));
     }
 
     socket.userId = user._id.toString();
     socket.user = user;
+    // console.log("Authenticated socket user:", user.email);
     next();
   } catch (err) {
-    next(new Error('Authentication error'));
+    console.error("Socket auth failed:", err.message);
+    next(new Error("Authentication error"));
   }
 });
 
 io.on("connection", (socket) => {
-  console.log("User connected:", socket.userId);
+  // console.log("User connected:", socket.userId);
 
   // Join user to their personal room for notifications
   socket.join(`user:${socket.userId}`);
@@ -292,7 +313,9 @@ io.on("connection", (socket) => {
       if (room) {
         // Remove user from room
         const userArray = Array.from(room);
-        const updatedUsers = userArray.filter(user => user.id !== socket.userId);
+        const updatedUsers = userArray.filter(
+          (user) => user.id !== socket.userId
+        );
         chatRooms.set(roomId, new Set(updatedUsers));
 
         // Send system message
@@ -338,20 +361,22 @@ io.on("connection", (socket) => {
   });
 
   socket.on("disconnect", async () => {
-    console.log("User disconnected:", socket.userId);
+    // console.log("User disconnected:", socket.userId);
 
     activeUsers.delete(socket.userId);
 
     // Remove from all chat rooms
     chatRooms.forEach(async (users, roomId) => {
       const userArray = Array.from(users);
-      const updatedUsers = userArray.filter(user => user.socketId !== socket.id);
+      const updatedUsers = userArray.filter(
+        (user) => user.socketId !== socket.id
+      );
 
       if (updatedUsers.length !== userArray.length) {
         chatRooms.set(roomId, new Set(updatedUsers));
 
         // Send leave message if user was in room
-        const user = userArray.find(u => u.socketId === socket.id);
+        const user = userArray.find((u) => u.socketId === socket.id);
         if (user) {
           try {
             const leaveMessage = new Message({

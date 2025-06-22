@@ -1,9 +1,11 @@
-import nodemailer from 'nodemailer';
+import nodemailer from "nodemailer";
+import dotenv from "dotenv";
+dotenv.config();
 
 class EmailService {
   constructor() {
-    this.transporter = nodemailer.createTransporter({
-      host: process.env.SMTP_HOST || 'smtp.gmail.com',
+    this.transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST || "smtp.gmail.com",
       port: process.env.SMTP_PORT || 587,
       secure: false,
       auth: {
@@ -15,11 +17,11 @@ class EmailService {
 
   async sendVerificationEmail(user, token) {
     const verificationUrl = `${process.env.CLIENT_URL}/verify-email/${token}`;
-    
+
     const mailOptions = {
       from: process.env.SMTP_FROM || process.env.SMTP_USER,
       to: user.email,
-      subject: 'Verify Your Email - Focus Vault',
+      subject: "Verify Your Email - Focus Vault",
       html: `
         <div style="max-width: 600px; margin: 0 auto; font-family: Arial, sans-serif;">
           <div style="background: linear-gradient(135deg, #8B5CF6 0%, #3B82F6 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
@@ -68,7 +70,7 @@ class EmailService {
       await this.transporter.sendMail(mailOptions);
       console.log(`Verification email sent to ${user.email}`);
     } catch (error) {
-      console.error('Failed to send verification email:', error);
+      console.error("Failed to send verification email:", error);
       throw error;
     }
   }
@@ -123,7 +125,7 @@ class EmailService {
       await this.transporter.sendMail(mailOptions);
       console.log(`Study reminder sent to ${user.email}`);
     } catch (error) {
-      console.error('Failed to send study reminder:', error);
+      console.error("Failed to send study reminder:", error);
       throw error;
     }
   }

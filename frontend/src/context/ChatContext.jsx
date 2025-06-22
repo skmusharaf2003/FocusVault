@@ -23,7 +23,7 @@ export const ChatProvider = ({ children }) => {
   const [isInRoom, setIsInRoom] = useState(false);
   const [recentRooms, setRecentRooms] = useState([]);
 
-  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+  const API_URL = import.meta.env.API_URL || 'http://localhost:5000';
 
   useEffect(() => {
     if (socket) {
@@ -66,6 +66,7 @@ export const ChatProvider = ({ children }) => {
         socket.off('chat:error');
       };
     }
+    // console.log('Socket available in ChatContext?', socket);
   }, [socket]);
 
   useEffect(() => {

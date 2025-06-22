@@ -20,22 +20,25 @@ export const SocketProvider = ({ children }) => {
   const [onlineUsers, setOnlineUsers] = useState(new Map());
 
   useEffect(() => {
+    // console.log('Auth user:', user);
+    // console.log('Email verified:', user?.emailVerified);
     if (user && user.emailVerified) {
       const token = localStorage.getItem('token');
       if (!token) return;
+      // console.log('Socket auth token:', token);
 
-      const newSocket = io(import.meta.env.VITE_API_URL || 'http://localhost:5000', {
+      const newSocket = io(import.meta.env.API_URL || 'http://localhost:5000', {
         auth: { token },
         transports: ['websocket', 'polling'],
       });
 
       newSocket.on('connect', () => {
-        console.log('Connected to server');
+        // console.log('Connected to server');
         setIsConnected(true);
       });
 
       newSocket.on('disconnect', () => {
-        console.log('Disconnected from server');
+        // console.log('Disconnected from server');
         setIsConnected(false);
       });
 
@@ -111,7 +114,7 @@ export const SocketProvider = ({ children }) => {
         setIsConnected(false);
       };
     }
-  }, [user]);
+  }, [user?.emailVerified]);
 
   // Study session methods
   const emitStudyStart = (data) => {

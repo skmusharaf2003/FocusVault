@@ -323,7 +323,7 @@ const StudyTimer = () => {
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
-              onClick={async () => { await saveSessionTime(), handleEndSession }}
+              onClick={async () => { await saveSessionTime(), handleEndSession() }}
               className="bg-red-500 text-white px-6 py-3 rounded-xl flex items-center space-x-2"
             >
               <Square size={20} />
