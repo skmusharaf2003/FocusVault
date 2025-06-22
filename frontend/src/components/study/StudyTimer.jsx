@@ -288,7 +288,7 @@ const StudyTimer = () => {
                 </div>
                 {isCompleted && (
                   <div className="text-green-500 text-xs font-medium mt-1">
-                    ✓ Target Achieved!
+                    ✓ Completed
                   </div>
                 )}
               </div>
@@ -561,7 +561,7 @@ const StudyTimer = () => {
                     </div>
                   </div>
                   <span className="text-xs px-2 py-1 bg-green-100 text-green-700 rounded-full">
-                    ✓ Completed
+                    ✓
                   </span>
                 </motion.div>
               ))}

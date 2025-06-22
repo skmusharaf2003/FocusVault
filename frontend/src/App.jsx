@@ -1,8 +1,8 @@
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import MainLayout from './components/layout/MainLayout';
 import AuthLayout from './components/layout/AuthLayout';
-import Home from './pages/Home';
+import Home from './components/home/Home';
 import ReadingSpace from './pages/ReadingSpace';
 import Todo from './pages/Todo';
 import Calendar from './pages/Calendar';
@@ -19,19 +19,22 @@ import StudySession from './components/study/StudySession';
 
 function App() {
   const { user, loading } = useAuth();
+  const location = useLocation();
 
-  if (loading) {
-    return <LoadingScreen />;
-  }
+  if (loading) return <LoadingScreen />;
 
-  // Show email verification screen for unverified users
-  if (user && !user.emailVerified) {
+  const isOnVerifyPage = location.pathname.startsWith('/verify-email');
+
+  if (user && !user.emailVerified && !isOnVerifyPage) {
     return <EmailVerification />;
   }
+
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
       <Routes>
+        <Route path="/verify-email/:token" element={<VerifyEmail />} />
+
         {user ? (
           <Route element={<MainLayout />}>
             <Route path="/" element={<Home />} />
@@ -46,12 +49,12 @@ function App() {
           </Route>
         ) : (
           <>
+            {/* Public routes */}
             <Route element={<AuthLayout />}>
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
             </Route>
             <Route path="/auth/callback" element={<AuthCallback />} />
-            <Route path="/verify-email/:token" element={<VerifyEmail />} />
             <Route path="*" element={<Navigate to="/login" replace />} />
           </>
         )}

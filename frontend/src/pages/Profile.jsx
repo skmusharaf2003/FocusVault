@@ -79,7 +79,7 @@ const Profile = () => {
       setPreferences(user.preferences || preferences);
     }
     fetchTimetables();
-    
+
     // Initialize dark mode from localStorage or system preference
     const savedTheme = localStorage.getItem('theme');
     const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
@@ -474,6 +474,16 @@ const Profile = () => {
           </div>
         )}
       </motion.div>
+      <motion.button
+        whileHover={{ scale: 1.02 }}
+        whileTap={{ scale: 0.98 }}
+        onClick={logout}
+        className="w-full flex items-center justify-center space-x-2 px-4 py-2 text-sm sm:text-base bg-red-500 text-white rounded-lg"
+      >
+        <LogOut size={18} />
+        <span>Sign Out</span>
+      </motion.button>
+
     </div>
   );
 
@@ -888,7 +898,7 @@ const Profile = () => {
         className="bg-white dark:bg-gray-800 rounded-2xl p-6 border border-gray-100 dark:border-gray-700"
       >
         <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-4">Help & Support</h3>
-        
+
         <div className="space-y-4">
           <Link
             to="/help"
@@ -927,7 +937,7 @@ const Profile = () => {
         className="bg-gradient-to-br from-primary-50 to-secondary-50 dark:from-primary-900/20 dark:to-secondary-900/20 rounded-2xl p-6 border border-primary-200 dark:border-primary-800"
       >
         <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-4">App Information</h3>
-        
+
         <div className="space-y-3 text-sm">
           <div className="flex justify-between">
             <span className="text-gray-600 dark:text-gray-300">Version</span>
@@ -957,15 +967,7 @@ const Profile = () => {
           <h1 className="text-2xl font-bold text-gray-800 dark:text-white">Profile</h1>
           <p className="text-gray-600 dark:text-gray-300">Manage your account and preferences</p>
         </div>
-        <motion.button
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          onClick={logout}
-          className="flex items-center space-x-2 px-4 py-2 bg-red-500 text-white rounded-xl"
-        >
-          <LogOut size={16} />
-          <span>Sign Out</span>
-        </motion.button>
+
       </motion.div>
 
       <div className="overflow-x-auto">
@@ -984,6 +986,7 @@ const Profile = () => {
               <tab.icon size={16} />
               <span className="text-sm">{tab.label}</span>
             </motion.button>
+
           ))}
         </div>
       </div>

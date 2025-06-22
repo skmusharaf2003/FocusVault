@@ -20,16 +20,16 @@ router.post("/register", async (req, res) => {
     }
 
     // Generate email verification token
-    const emailVerificationToken = crypto.randomBytes(32).toString('hex');
+    const emailVerificationToken = crypto.randomBytes(32).toString("hex");
     const emailVerificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
 
     // Create new user
-    const user = new User({ 
-      name, 
-      email, 
+    const user = new User({
+      name,
+      email,
       password,
       emailVerificationToken,
-      emailVerificationExpires
+      emailVerificationExpires,
     });
     await user.save();
 
@@ -37,7 +37,7 @@ router.post("/register", async (req, res) => {
     try {
       await emailService.sendVerificationEmail(user, emailVerificationToken);
     } catch (emailError) {
-      console.error('Failed to send verification email:', emailError);
+      console.error("Failed to send verification email:", emailError);
       // Don't fail registration if email fails
     }
 
@@ -49,10 +49,11 @@ router.post("/register", async (req, res) => {
     );
 
     res.status(201).json({
-      message: "User created successfully. Please check your email for verification.",
+      message:
+        "User created successfully. Please check your email for verification.",
       token,
       user,
-      requiresVerification: true
+      requiresVerification: true,
     });
   } catch (error) {
     console.error("Registration error:", error);
@@ -91,7 +92,7 @@ router.post("/login", async (req, res) => {
       message: "Login successful",
       token,
       user,
-      requiresVerification: !user.emailVerified
+      requiresVerification: !user.emailVerified,
     });
   } catch (error) {
     console.error("Login error:", error);
@@ -100,12 +101,14 @@ router.post("/login", async (req, res) => {
 });
 
 // Google OAuth routes
-router.get('/google',
-  passport.authenticate('google', { scope: ['profile', 'email'] })
+router.get(
+  "/google",
+  passport.authenticate("google", { scope: ["profile", "email"] })
 );
 
-router.get('/google/callback',
-  passport.authenticate('google', { session: false }),
+router.get(
+  "/google/callback",
+  passport.authenticate("google", { session: false }),
   (req, res) => {
     try {
       // Generate JWT token
@@ -118,24 +121,26 @@ router.get('/google/callback',
       // Redirect to frontend with token
       res.redirect(`${process.env.CLIENT_URL}/auth/callback?token=${token}`);
     } catch (error) {
-      console.error('Google callback error:', error);
+      console.error("Google callback error:", error);
       res.redirect(`${process.env.CLIENT_URL}/login?error=auth_failed`);
     }
   }
 );
 
 // Email verification
-router.get('/verify-email/:token', async (req, res) => {
+router.get("/verify-email/:token", async (req, res) => {
   try {
     const { token } = req.params;
 
     const user = await User.findOne({
       emailVerificationToken: token,
-      emailVerificationExpires: { $gt: Date.now() }
+      emailVerificationExpires: { $gt: Date.now() },
     });
 
     if (!user) {
-      return res.status(400).json({ message: 'Invalid or expired verification token' });
+      return res
+        .status(400)
+        .json({ message: "Invalid or expired verification token" });
     }
 
     user.emailVerified = true;
@@ -143,24 +148,24 @@ router.get('/verify-email/:token', async (req, res) => {
     user.emailVerificationExpires = undefined;
     await user.save();
 
-    res.json({ message: 'Email verified successfully' });
+    res.json({ message: "Email verified successfully" });
   } catch (error) {
-    console.error('Email verification error:', error);
-    res.status(500).json({ message: 'Server error during email verification' });
+    console.error("Email verification error:", error);
+    res.status(500).json({ message: "Server error during email verification" });
   }
 });
 
 // Resend verification email
-router.post('/resend-verification', authMiddleware, async (req, res) => {
+router.post("/resend-verification", authMiddleware, async (req, res) => {
   try {
     const user = req.user;
 
     if (user.emailVerified) {
-      return res.status(400).json({ message: 'Email already verified' });
+      return res.status(400).json({ message: "Email already verified" });
     }
 
     // Generate new token
-    const emailVerificationToken = crypto.randomBytes(32).toString('hex');
+    const emailVerificationToken = crypto.randomBytes(32).toString("hex");
     const emailVerificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
     user.emailVerificationToken = emailVerificationToken;
@@ -170,10 +175,10 @@ router.post('/resend-verification', authMiddleware, async (req, res) => {
     // Send verification email
     await emailService.sendVerificationEmail(user, emailVerificationToken);
 
-    res.json({ message: 'Verification email sent' });
+    res.json({ message: "Verification email sent" });
   } catch (error) {
-    console.error('Resend verification error:', error);
-    res.status(500).json({ message: 'Failed to resend verification email' });
+    console.error("Resend verification error:", error);
+    res.status(500).json({ message: "Failed to resend verification email" });
   }
 });
 
@@ -187,7 +192,7 @@ router.get("/me", authMiddleware, async (req, res) => {
 
     res.json({
       ...user.toJSON(),
-      requiresVerification: !user.emailVerified
+      requiresVerification: !user.emailVerified,
     });
   } catch (error) {
     console.error("Get user error:", error);

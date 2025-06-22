@@ -8,6 +8,7 @@ import { StudyProvider } from './context/StudyContext.jsx';
 import { ThemeProvider } from './context/ThemeContext.jsx';
 import { SocketProvider } from './context/SocketContext.jsx';
 import { ChatProvider } from './context/ChatContext.jsx';
+import ErrorBoundary from './components/ui/ErrorBoundry.jsx';
 import './index.css';
 
 // Register service worker for PWA
@@ -38,7 +39,9 @@ createRoot(document.getElementById('root')).render(
           <SocketProvider>
             <StudyProvider>
               <ChatProvider>
-                <App />
+                <ErrorBoundary>
+                  <App />
+                </ErrorBoundary>
                 <Toaster
                   position="top-center"
                   toastOptions={{

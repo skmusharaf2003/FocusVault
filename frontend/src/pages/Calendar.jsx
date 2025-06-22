@@ -250,11 +250,14 @@ const Calendar = () => {
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             onClick={() => setIsAddingEvent(true)}
-            className="bg-gradient-to-r from-primary-600 to-secondary-600 text-white px-4 py-2 rounded-xl flex items-center space-x-2"
+            className="text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20
+             px-4 py-2 rounded-xl flex items-center space-x-1 
+             text-sm sm:text-base whitespace-nowrap"
           >
-            <Plus size={16} />
-            <span>Add Event</span>
+            <Plus size={14} className="shrink-0" />
+            <span className="truncate">Add Event</span>
           </motion.button>
+
         </div>
 
         {/* Add Event Form */}

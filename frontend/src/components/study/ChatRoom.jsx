@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { m, motion } from 'framer-motion';
 import { Send, Users, MessageCircle, Hash, LogOut, Wifi, WifiOff } from 'lucide-react';
 import { format } from 'date-fns';
 import { useChat } from '../../context/ChatContext';
@@ -50,8 +50,9 @@ const ChatRoom = () => {
 
   const getStatusColor = (status) => {
     switch (status) {
-      case 'studying': return 'bg-green-500';
+      case 'online': return 'bg-green-500';
       case 'break': return 'bg-orange-500';
+      case 'studying': return 'bg-yellow-500';
       case 'helping': return 'bg-blue-500';
       default: return 'bg-gray-500';
     }
@@ -72,11 +73,10 @@ const ChatRoom = () => {
         <motion.div
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
-          className={`flex items-center justify-center space-x-2 p-3 rounded-xl ${
-            isConnected 
-              ? 'bg-green-50 dark:bg-green-900/20 text-green-600' 
-              : 'bg-red-50 dark:bg-red-900/20 text-red-600'
-          }`}
+          className={`flex items-center justify-center space-x-2 p-3 rounded-xl ${isConnected
+            ? 'bg-green-50 dark:bg-green-900/20 text-green-600'
+            : 'bg-red-50 dark:bg-red-900/20 text-red-600'
+            }`}
         >
           {isConnected ? <Wifi size={16} /> : <WifiOff size={16} />}
           <span className="text-sm font-medium">
@@ -240,12 +240,24 @@ const ChatRoom = () => {
         <h4 className="font-medium text-gray-800 dark:text-white mb-3">Online Now</h4>
         <div className="flex space-x-3 overflow-x-auto pb-2">
           {roomUsers.map((roomUser, index) => (
+
             <div key={roomUser.id} className="flex-shrink-0 text-center">
               <div className="relative">
-                <div className="w-10 h-10 bg-gradient-to-br from-primary-500 to-secondary-500 rounded-xl flex items-center justify-center mb-1">
-                  <span className="text-white font-bold text-sm">
-                    {roomUser.avatar || roomUser.name?.charAt(0) || 'U'}
-                  </span>
+                <div className="w-10 h-10 bg-gradient-to-br from-primary-500 to-secondary-500 rounded-full flex items-center justify-center mb-1">
+                  {roomUser.avatar ? (
+                    <img
+                      src={roomUser.avatar}
+                      alt={roomUser.name}
+                      className="w-full h-full rounded-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full rounded-full bg-gray-500 flex items-center justify-center">
+                      <span className="text-white font-bold text-sm">
+                        {roomUser.name?.charAt(0).toUpperCase() || 'U'}
+                      </span>
+                    </div>
+                  )}
+
                 </div>
                 <div className={`absolute -bottom-1 -right-1 w-3 h-3 ${getStatusColor(roomUser.status)} rounded-full border-2 border-white dark:border-gray-800`} />
               </div>
@@ -290,15 +302,26 @@ const ChatRoom = () => {
               >
                 <div className={`max-w-[75%] ${isOwnMessage ? 'order-2' : 'order-1'}`}>
                   <div className={`flex items-end space-x-2 ${isOwnMessage ? 'flex-row-reverse space-x-reverse' : ''}`}>
-                    <div className="w-8 h-8 bg-gradient-to-br from-primary-500 to-secondary-500 rounded-lg flex items-center justify-center flex-shrink-0">
-                      <span className="text-white font-bold text-xs">
-                        {msg.userAvatar || msg.username?.charAt(0) || 'U'}
-                      </span>
+                    <div className="w-8 h-8 bg-gradient-to-br from-primary-500 to-secondary-500 rounded-full flex items-center justify-center flex-shrink-0">
+                      {msg.userAvatar ? (
+                        <img
+                          src={msg.userAvatar}
+                          alt={msg.username}
+                          className="w-full h-full rounded-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full rounded-full bg-gray-400 flex items-center justify-center">
+                          <span className="text-white font-bold text-xs">
+                            {msg.username?.charAt(0).toUpperCase() || 'U'}
+                          </span>
+                        </div>
+                      )}
+
                     </div>
                     <div>
                       <div className={`px-4 py-2 rounded-2xl ${isOwnMessage
-                          ? 'bg-gradient-to-r from-primary-600 to-secondary-600 text-white'
-                          : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-white'
+                        ? 'bg-gradient-to-r from-primary-600 to-secondary-600 text-white'
+                        : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-white'
                         }`}>
                         <p className="text-sm">{msg.message}</p>
                       </div>

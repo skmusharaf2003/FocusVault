@@ -4,9 +4,11 @@ import User from "../models/User.js";
 const authMiddleware = async (req, res, next) => {
   try {
     const authHeader = req.header("Authorization");
-    
+
     if (!authHeader) {
-      return res.status(401).json({ message: "No authorization header provided" });
+      return res
+        .status(401)
+        .json({ message: "No authorization header provided" });
     }
 
     const token = authHeader.replace("Bearer ", "");
@@ -16,9 +18,12 @@ const authMiddleware = async (req, res, next) => {
     }
 
     try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET || "fallback_secret");
+      const decoded = jwt.verify(
+        token,
+        process.env.JWT_SECRET || "fallback_secret"
+      );
       const user = await User.findById(decoded.userId);
-      
+
       if (!user) {
         return res.status(401).json({ message: "User not found" });
       }
@@ -38,9 +43,9 @@ const authMiddleware = async (req, res, next) => {
 
 const requireEmailVerification = (req, res, next) => {
   if (!req.user.emailVerified) {
-    return res.status(403).json({ 
+    return res.status(403).json({
       message: "Email verification required",
-      requiresVerification: true 
+      requiresVerification: true,
     });
   }
   next();
