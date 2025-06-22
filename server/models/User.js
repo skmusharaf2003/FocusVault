@@ -16,8 +16,22 @@ const userSchema = new mongoose.Schema({
   },
   password: {
     type: String,
-    required: true,
     minlength: 6
+  },
+  googleId: {
+    type: String,
+    unique: true,
+    sparse: true
+  },
+  emailVerified: {
+    type: Boolean,
+    default: false
+  },
+  emailVerificationToken: {
+    type: String
+  },
+  emailVerificationExpires: {
+    type: Date
   },
   dateOfBirth: {
     type: Date
@@ -46,11 +60,29 @@ const userSchema = new mongoose.Schema({
     },
     preferredStudyTime: {
       type: String,
-      default: 'morning'
+      default: 'evening'
+    },
+    preferredStudyHours: {
+      start: {
+        type: String,
+        default: '19:00'
+      },
+      end: {
+        type: String,
+        default: '21:00'
+      }
     },
     studyDays: {
       type: [String],
       default: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
+    },
+    emailNotifications: {
+      type: Boolean,
+      default: true
+    },
+    studyReminders: {
+      type: Boolean,
+      default: true
     }
   },
   stats: {
@@ -69,6 +101,9 @@ const userSchema = new mongoose.Schema({
     lastStudyDate: {
       type: Date
     }
+  },
+  lastNotificationSent: {
+    type: Date
   }
 }, {
   timestamps: true
@@ -89,6 +124,7 @@ userSchema.pre('save', async function(next) {
 
 // Compare password method
 userSchema.methods.comparePassword = async function(candidatePassword) {
+  if (!this.password) return false;
   return bcrypt.compare(candidatePassword, this.password);
 };
 
@@ -96,6 +132,7 @@ userSchema.methods.comparePassword = async function(candidatePassword) {
 userSchema.methods.toJSON = function() {
   const userObject = this.toObject();
   delete userObject.password;
+  delete userObject.emailVerificationToken;
   return userObject;
 };
 

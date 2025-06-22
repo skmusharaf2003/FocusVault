@@ -11,6 +11,9 @@ import Help from './pages/Help';
 import AboutUs from './pages/AboutUs';
 import Login from './pages/auth/Login';
 import Register from './pages/auth/Register';
+import EmailVerification from './pages/auth/EmailVerification';
+import AuthCallback from './pages/auth/AuthCallback';
+import VerifyEmail from './pages/auth/VerifyEmail';
 import LoadingScreen from './components/ui/LoadingScreen';
 import StudySession from './components/study/StudySession';
 
@@ -19,6 +22,11 @@ function App() {
 
   if (loading) {
     return <LoadingScreen />;
+  }
+
+  // Show email verification screen for unverified users
+  if (user && !user.emailVerified) {
+    return <EmailVerification />;
   }
 
   return (
@@ -42,6 +50,8 @@ function App() {
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
             </Route>
+            <Route path="/auth/callback" element={<AuthCallback />} />
+            <Route path="/verify-email/:token" element={<VerifyEmail />} />
             <Route path="*" element={<Navigate to="/login" replace />} />
           </>
         )}

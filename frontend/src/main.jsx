@@ -6,9 +6,11 @@ import App from './App.jsx';
 import { AuthProvider } from './context/AuthContext.jsx';
 import { StudyProvider } from './context/StudyContext.jsx';
 import { ThemeProvider } from './context/ThemeContext.jsx';
+import { SocketProvider } from './context/SocketContext.jsx';
+import { ChatProvider } from './context/ChatContext.jsx';
 import './index.css';
 
-// Register service worker for PWA only in production
+// Register service worker for PWA
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js')
@@ -21,26 +23,37 @@ if ('serviceWorker' in navigator && import.meta.env.PROD) {
   });
 }
 
+// Request notification permission
+if ('Notification' in window && 'serviceWorker' in navigator) {
+  Notification.requestPermission().then((permission) => {
+    console.log('Notification permission:', permission);
+  });
+}
+
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <BrowserRouter>
       <ThemeProvider>
         <AuthProvider>
-          <StudyProvider>
-            <App />
-            <Toaster
-              position="top-center"
-              toastOptions={{
-                duration: 3000,
-                style: {
-                  background: '#1F2937',
-                  color: '#F9FAFB',
-                  borderRadius: '12px',
-                  padding: '12px 16px'
-                }
-              }}
-            />
-          </StudyProvider>
+          <SocketProvider>
+            <StudyProvider>
+              <ChatProvider>
+                <App />
+                <Toaster
+                  position="top-center"
+                  toastOptions={{
+                    duration: 3000,
+                    style: {
+                      background: '#1F2937',
+                      color: '#F9FAFB',
+                      borderRadius: '12px',
+                      padding: '12px 16px'
+                    }
+                  }}
+                />
+              </ChatProvider>
+            </StudyProvider>
+          </SocketProvider>
         </AuthProvider>
       </ThemeProvider>
     </BrowserRouter>

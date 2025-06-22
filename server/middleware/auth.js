@@ -1,6 +1,7 @@
 import jwt from "jsonwebtoken";
+import User from "../models/User.js";
 
-const authMiddleware = (req, res, next) => {
+const authMiddleware = async (req, res, next) => {
   try {
     const authHeader = req.header("Authorization");
     
@@ -16,7 +17,14 @@ const authMiddleware = (req, res, next) => {
 
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET || "fallback_secret");
+      const user = await User.findById(decoded.userId);
+      
+      if (!user) {
+        return res.status(401).json({ message: "User not found" });
+      }
+
       req.userId = decoded.userId;
+      req.user = user;
       next();
     } catch (jwtError) {
       console.error("JWT verification failed:", jwtError.message);
@@ -28,4 +36,14 @@ const authMiddleware = (req, res, next) => {
   }
 };
 
-export { authMiddleware };
+const requireEmailVerification = (req, res, next) => {
+  if (!req.user.emailVerified) {
+    return res.status(403).json({ 
+      message: "Email verification required",
+      requiresVerification: true 
+    });
+  }
+  next();
+};
+
+export { authMiddleware, requireEmailVerification };
