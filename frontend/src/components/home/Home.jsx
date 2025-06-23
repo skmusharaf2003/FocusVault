@@ -1,25 +1,24 @@
 import { useState, useEffect, useMemo } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, time } from "framer-motion";
 import {
     BarChart as RechartsBarChart, Bar, XAxis, YAxis, ResponsiveContainer,
     PieChart as RechartsPieChart, Pie, Cell, LineChart, Line, AreaChart, Area,
     RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, Tooltip, Legend
 } from "recharts";
-import { BarChart3, Target, Activity, BookOpen, Calendar, PieChart, TrendingUp, Trophy, CheckCircle, Filter, Clock, Users } from "lucide-react";
-import { useAuth } from "../../context/AuthContext";
+import CountUp from 'react-countup';
+import { BarChart3, Target, Activity, BookOpen, Calendar, PieChart, TrendingUp, Trophy, CheckCircle, Filter, Clock, Users, Lightbulb } from "lucide-react";
 import { useStudy } from "../../context/StudyContext";
 import Header from "./Header";
 import QuoteCard from "./QuoteCard";
 import StatsGrid from "./StatsGrid";
-import FilterPanel from "./FilterPanel";
 import ChartCard from "./ChartCard";
 import SessionsList from "./SessionsList";
 import axios from "axios";
 
+
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
-const Home = () => {
-    const { user } = useAuth();
+const Home = ({ user }) => {
     const { studyData, fetchSessionStats, fetchDashboardAndTimetables } = useStudy();
     const [quote, setQuote] = useState({ text: "", author: "" });
     const [activeView, setActiveView] = useState("overview");
@@ -27,7 +26,7 @@ const Home = () => {
     const [selectedSubjects, setSelectedSubjects] = useState([]);
     const [performanceFilter, setPerformanceFilter] = useState("all");
     const [searchQuery, setSearchQuery] = useState("");
-    const [showFilters, setShowFilters] = useState(false);
+    const [todaySessions, setTodaySessions] = useState([]);
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage] = useState(10);
     const [detailedStats, setDetailedStats] = useState(null);
@@ -42,9 +41,9 @@ const Home = () => {
             try {
                 setLoading(true);
                 await fetchDashboardAndTimetables();
-                const stats = await fetchSessionStats(dateRange, selectedSubjects.join(","));
+                const stats = await fetchSessionStats(dateRange, selectedSubjects);
                 setDetailedStats(stats);
-                
+
                 // Fetch enhanced analytics
                 const analyticsResponse = await axios.get(`${API_URL}/api/study/analytics`, {
                     params: {
@@ -53,6 +52,9 @@ const Home = () => {
                     }
                 });
                 setAnalytics(analyticsResponse.data);
+
+                const todaySessionsRes = await axios.get(`${API_URL}/api/study/sessions/today`);
+                setTodaySessions(todaySessionsRes.data);
             } catch (error) {
                 console.error("Failed to fetch data:", error);
             } finally {
@@ -60,19 +62,19 @@ const Home = () => {
             }
         };
 
-        const cacheKey = `stats_${dateRange}_${selectedSubjects.join("_")}`;
+        const cacheKey = `stats_${dateRange}_${selectedSubjects}`;
         const cachedStats = localStorage.getItem(cacheKey);
         if (cachedStats && !loading) {
             setDetailedStats(JSON.parse(cachedStats));
         }
-        
+
         fetchData();
     }, [dateRange, selectedSubjects, fetchSessionStats, fetchDashboardAndTimetables]);
 
     // Cache stats
     useEffect(() => {
         if (detailedStats) {
-            const cacheKey = `stats_${dateRange}_${selectedSubjects.join("_")}`;
+            const cacheKey = `stats_${dateRange}_${selectedSubjects}`;
             localStorage.setItem(cacheKey, JSON.stringify(detailedStats));
         }
     }, [detailedStats, dateRange, selectedSubjects]);
@@ -95,6 +97,49 @@ const Home = () => {
             productivity: avgEfficiency > 100 ? "High" : avgEfficiency > 50 ? "Medium" : "Low",
         };
     }, [studyData, detailedStats]);
+
+    const formatTime = (seconds) => {
+        if (seconds < 3600) {
+            const mins = Math.floor(seconds / 60);
+            const secs = seconds % 60;
+            return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+        }
+        const hours = Math.floor(seconds / 3600);
+        const mins = Math.floor((seconds % 3600) / 60);
+        return `${hours}h ${mins}m`;
+    };
+
+    const generateInsights = () => {
+        if (!detailedStats || !studyData) return [];
+        const insights = [];
+
+        // Longest studied subject
+        const longestSubject = subjectData.reduce(
+            (max, curr) => (curr.value > max.value ? curr : max),
+            subjectData[0] || { name: '', value: 0 }
+        );
+        if (longestSubject.value > 0) {
+            insights.push(
+                `🧠 You studied ${longestSubject.name} the longest (${formatTime(longestSubject.value)}). Great job!`
+            );
+        }
+
+        // Low session day warning
+        if (studyData.todayStats?.sessionCount < 2) {
+            insights.push(`⚠️ Only ${studyData.todayStats?.sessionCount || 0} session today. Let’s bounce back!`);
+        }
+
+        // Most resumed subject
+        const mostResumed = todaySessions.reduce(
+            (max, curr) => (curr.resumedCount > max.resumedCount ? curr : max),
+            todaySessions[0] || { subject: '', resumedCount: 0 }
+        );
+        if (mostResumed.resumedCount > 0) {
+            insights.push(`🔁 Most resumed subject: ${mostResumed.subject} — try focusing earlier.`);
+        }
+
+        return insights.slice(0, 3);
+    };
 
     // Filtered sessions
     const filteredSessions = useMemo(() => {
@@ -184,7 +229,7 @@ const Home = () => {
         { id: "overview", label: "Overview", icon: BarChart3 },
         { id: "analytics", label: "Analytics", icon: TrendingUp },
         { id: "performance", label: "Performance", icon: Target },
-        { id: "sessions", label: "Sessions",  icon: BookOpen },
+        { id: "sessions", label: "Sessions", icon: BookOpen },
     ];
 
     return (
@@ -192,14 +237,39 @@ const Home = () => {
             <div className="max-w-7xl mx-auto space-y-6">
                 <Header
                     user={user}
-                    toggleFilters={() => setShowFilters(!showFilters)}
                 />
                 <QuoteCard quote={quote} setQuote={setQuote} />
-                
+                {generateInsights().length > 0 && (
+                    <motion.div
+                        initial={{ y: 20, opacity: 0 }}
+                        animate={{ y: 0, opacity: 1 }}
+                        transition={{ delay: 0.3 }}
+                        className="bg-white dark:bg-gray-800 rounded-2xl p-6 border border-gray-100 dark:border-gray-700 backdrop-blur-md"
+                    >
+                        <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-4 flex items-center space-x-2">
+                            <Lightbulb size={20} />
+                            <span>Smart Insights</span>
+                        </h3>
+                        <div className="space-y-3">
+                            {generateInsights().map((insight, index) => (
+                                <motion.div
+                                    key={index}
+                                    initial={{ x: -20, opacity: 0 }}
+                                    animate={{ x: 0, opacity: 1 }}
+                                    transition={{ delay: 0.1 * index }}
+                                    className="p-3 bg-gray-50 dark:bg-gray-700 rounded-xl"
+                                >
+                                    <p className="text-sm text-gray-800 dark:text-white">{insight}</p>
+                                </motion.div>
+                            ))}
+                        </div>
+                    </motion.div>
+                )}
+
                 <motion.div
                     initial={{ y: 20, opacity: 0 }}
                     animate={{ y: 0, opacity: 1 }}
-                    className="flex overflow-x-auto space-x-1 bg-white dark:bg-gray-800 rounded-2xl p-1 border border-gray-200 dark:border-gray-700"
+                    className="flex overflow-x-auto hide-scrollbar space-x-1 bg-white dark:bg-gray-800 rounded-2xl p-1 border border-gray-200 dark:border-gray-700"
                 >
                     {views.map((view) => (
                         <motion.button
@@ -217,21 +287,7 @@ const Home = () => {
                         </motion.button>
                     ))}
                 </motion.div>
-                
-                <FilterPanel
-                    showFilters={showFilters}
-                    searchQuery={searchQuery}
-                    setSearchQuery={setSearchQuery}
-                    dateRange={dateRange}
-                    setDateRange={setDateRange}
-                    selectedSubjects={selectedSubjects}
-                    setSelectedSubjects={setSelectedSubjects}
-                    performanceFilter={performanceFilter}
-                    setPerformanceFilter={setPerformanceFilter}
-                    uniqueSubjects={uniqueSubjects}
-                    subjectData={subjectData}
-                />
-                
+
                 <AnimatePresence mode="wait">
                     <motion.div
                         key={activeView}
@@ -283,7 +339,7 @@ const Home = () => {
                                                         </Pie>
                                                         <Tooltip
                                                             contentStyle={{ fontSize: '14px', borderRadius: '8px' }}
-                                                            formatter={(value, name) => [`${Math.round(value / 60)} mins`, name]}
+                                                            formatter={(value, name) => [`${formatTime(value)} mins`, name]}
                                                             labelStyle={{ color: '#374151', fontWeight: 500 }}
                                                         />
                                                     </RechartsPieChart>
@@ -317,7 +373,7 @@ const Home = () => {
                                                             </div>
                                                             <div className="text-right">
                                                                 <div className="font-medium text-gray-800 dark:text-white">
-                                                                    {Math.round(subject.value / 60)}m
+                                                                    {formatTime(subject.value)}m
                                                                 </div>
                                                                 <div className="text-sm text-gray-500">{subject.sessions} sessions</div>
                                                             </div>
@@ -346,7 +402,7 @@ const Home = () => {
                                         <div className="w-10 h-10 bg-blue-500 rounded-xl flex items-center justify-center mx-auto mb-2">
                                             <Clock className="text-white" size={20} />
                                         </div>
-                                        <p className="text-2xl font-bold text-blue-600">{analytics.userStats.totalStudyHours}h</p>
+                                        <p className="text-2xl font-bold text-blue-600">{formatTime(analytics.userStats.totalStudyHours)}m</p>
                                         <p className="text-xs text-blue-600 font-medium">Total Hours</p>
                                     </motion.div>
 
@@ -389,61 +445,110 @@ const Home = () => {
                                         <p className="text-xs text-orange-600 font-medium">Day Streak</p>
                                     </motion.div>
                                 </div>
+                                {/* study analytics */}
+                                <motion.div
+                                    initial={{ y: 20, opacity: 0 }}
+                                    animate={{ y: 0, opacity: 1 }}
+                                    transition={{ delay: 0.5 }}
+                                    className="bg-white dark:bg-gray-800 rounded-2xl p-6 border border-gray-100 dark:border-gray-700 backdrop-blur-md"
+                                >
+                                    <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-4 flex items-center space-x-2">
+                                        <BarChart3 size={20} />
+                                        <span>Study Analytics</span>
+                                    </h3>
+                                    <div className="flex flex-wrap gap-2 mb-4">
+                                        <div className="flex space-x-2">
+                                            {['week', 'month', 'year'].map((period) => (
+                                                <motion.button
+                                                    key={period}
+                                                    whileHover={{ scale: 1.05 }}
+                                                    whileTap={{ scale: 0.95 }}
+                                                    onClick={() => setdateRange(period)}
+                                                    className={`px-3 py-1 rounded-lg text-sm font-medium transition-all ${dateRange === period
+                                                        ? 'bg-primary-600 text-white'
+                                                        : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300'
+                                                        }`}
+                                                >
+                                                    {period.charAt(0).toUpperCase() + period.slice(1)}
+                                                </motion.button>
+                                            ))}
+                                        </div>
+                                        {uniqueSubjects.length > 0 && (
+                                            <select
+                                                value={selectedSubjects}
+                                                onChange={(e) => setSelectedSubjects(e.target.value)}
+                                                className="px-3 py-1 rounded-lg text-sm bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 border-none"
+                                            >
+                                                <option value="">All Subjects</option>
+                                                {uniqueSubjects.map((subject) => (
+                                                    <option key={subject} value={subject}>{subject}</option>
+                                                ))}
+                                            </select>
+                                        )}
+                                    </div>
+                                    {detailedStats && (
+                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                                            <div className="text-center">
+                                                <div className="text-xl font-bold text-primary-600">
+                                                    <CountUp end={detailedStats.summary.totalSessions} duration={2} />
+                                                </div>
+                                                <div className="text-xs text-gray-600 dark:text-gray-300">Total Sessions</div>
+                                            </div>
+                                            <div className="text-center">
+                                                <div className="text-xl font-bold text-blue-600">
+                                                    <CountUp end={Math.round(detailedStats.summary.totalStudyTime / 60)} duration={2} />m
+                                                </div>
+                                                <div className="text-xs text-gray-600 dark:text-gray-300">Study Time</div>
+                                            </div>
+                                            <div className="text-center">
+                                                <div className="text-xl font-bold text-green-600">
+                                                    <CountUp end={Math.round(detailedStats.summary.completionRate)} duration={2} />%
+                                                </div>
+                                                <div className="text-xs text-gray-600 dark:text-gray-300">Completion</div>
+                                            </div>
+                                            <div className="text-center">
+                                                <div className="text-xl font-bold text-orange-600">
+                                                    <CountUp end={Math.round(detailedStats.summary.averageSessionTime / 60)} duration={2} />m
+                                                </div>
+                                                <div className="text-xs text-gray-600 dark:text-gray-300">Avg Session</div>
+                                            </div>
+                                        </div>
+                                    )}
+                                </motion.div>
 
                                 {/* Daily Progress Chart */}
                                 <ChartCard title="Daily Study Progress" icon={TrendingUp}>
-                                    <div className="h-64">
-                                        <ResponsiveContainer width="100%" height="100%">
-                                            <AreaChart data={analytics.dailyStats}>
-                                                <defs>
-                                                    <linearGradient id="dailyGradient" x1="0" y1="0" x2="0" y2="1">
-                                                        <stop offset="5%" stopColor="#10B981" stopOpacity={0.3} />
-                                                        <stop offset="95%" stopColor="#10B981" stopOpacity={0} />
-                                                    </linearGradient>
-                                                </defs>
-                                                <XAxis 
-                                                    dataKey="date" 
-                                                    axisLine={false} 
-                                                    tickLine={false}
-                                                    tickFormatter={(value) => new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                                                />
-                                                <YAxis hide />
-                                                <Tooltip 
-                                                    labelFormatter={(value) => new Date(value).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
-                                                    formatter={(value, name) => [
-                                                        name === 'totalTime' ? `${Math.round(value / 60)} minutes` : value,
-                                                        name === 'totalTime' ? 'Study Time' : 'Sessions'
-                                                    ]}
-                                                />
-                                                <Area type="monotone" dataKey="totalTime" stroke="#10B981" fillOpacity={1} fill="url(#dailyGradient)" />
-                                            </AreaChart>
-                                        </ResponsiveContainer>
-                                    </div>
-                                </ChartCard>
-
-                                {/* Subject Breakdown */}
-                                <ChartCard title="Subject Performance Breakdown" icon={BarChart3}>
-                                    <div className="space-y-4">
-                                        {Object.entries(analytics.subjectBreakdown).map(([subject, data], index) => (
-                                            <div key={subject} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700 rounded-xl">
-                                                <div className="flex items-center space-x-3">
-                                                    <div 
-                                                        className="w-4 h-4 rounded-full"
-                                                        style={{ backgroundColor: colors[index % colors.length] }}
+                                    {detailedStats?.dailyStats?.length > 0 ? (
+                                        <div className="h-64">
+                                            <ResponsiveContainer width="100%" height="100%">
+                                                <AreaChart data={detailedStats.dailyStats}>
+                                                    <defs>
+                                                        <linearGradient id="dailyGradient" x1="0" y1="0" x2="0" y2="1">
+                                                            <stop offset="5%" stopColor="#10B981" stopOpacity={0.3} />
+                                                            <stop offset="95%" stopColor="#10B981" stopOpacity={0} />
+                                                        </linearGradient>
+                                                    </defs>
+                                                    <XAxis
+                                                        dataKey="date"
+                                                        axisLine={false}
+                                                        tickLine={false}
+                                                        tickFormatter={(value) => new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                                                     />
-                                                    <span className="font-medium text-gray-800 dark:text-white">{subject}</span>
-                                                </div>
-                                                <div className="text-right">
-                                                    <div className="font-medium text-gray-800 dark:text-white">
-                                                        {Math.round(data.totalTime / 60)} min
-                                                    </div>
-                                                    <div className="text-sm text-gray-500">
-                                                        {data.sessions} sessions • {Math.round(data.averageTime / 60)} min avg
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
+                                                    <YAxis hide />
+                                                    <Tooltip
+                                                        labelFormatter={(value) => new Date(value).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+                                                        formatter={(value, name) => [
+                                                            name === 'totalTime' ? `${Math.round(value / 60)} minutes` : value,
+                                                            name === 'totalTime' ? 'Study Time' : 'Sessions'
+                                                        ]}
+                                                    />
+                                                    <Area type="monotone" dataKey="totalTime" stroke="#10B981" fillOpacity={1} fill="url(#dailyGradient)" />
+                                                </AreaChart>
+                                            </ResponsiveContainer>
+                                        </div>
+                                    ) : (
+                                        <p className="text-gray-600 dark:text-gray-300 text-center py-8">No daily data available</p>
+                                    )}
                                 </ChartCard>
                             </div>
                         )}

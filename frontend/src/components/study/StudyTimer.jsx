@@ -28,6 +28,7 @@ const StudyTimer = () => {
   const [elapsedTime, setElapsedTime] = useState(0);
   const [sessionNotes, setSessionNotes] = useState('');
   const [showNotes, setShowNotes] = useState(false);
+  const [isEnding, setIsEnding] = useState(false);
   const [isAlarmPlaying, setIsAlarmPlaying] = useState(false);
   const [alarmMuted, setAlarmMuted] = useState(false);
   const audioRef = useRef(null);
@@ -42,12 +43,12 @@ const StudyTimer = () => {
     audioRef.current = new Audio();
     audioRef.current.loop = true;
     audioRef.current.volume = 0.7;
-    
+
     // Use a simple beep sound (data URL for a 1kHz tone)
     const audioContext = new (window.AudioContext || window.webkitAudioContext)();
     const oscillator = audioContext.createOscillator();
     const gainNode = audioContext.createGain();
-    
+
     // Create a simple alarm sound using Web Audio API
     const createAlarmSound = () => {
       const sampleRate = audioContext.sampleRate;
@@ -55,12 +56,12 @@ const StudyTimer = () => {
       const frameCount = sampleRate * duration;
       const arrayBuffer = audioContext.createBuffer(1, frameCount, sampleRate);
       const channelData = arrayBuffer.getChannelData(0);
-      
+
       for (let i = 0; i < frameCount; i++) {
         // Create a beep sound at 800Hz
         channelData[i] = Math.sin(2 * Math.PI * 800 * i / sampleRate) * 0.3;
       }
-      
+
       return arrayBuffer;
     };
 
@@ -79,6 +80,9 @@ const StudyTimer = () => {
     };
   }, []);
 
+
+
+
   // Fetch initial data
   useEffect(() => {
     fetchDashboardAndTimetables();
@@ -91,13 +95,13 @@ const StudyTimer = () => {
       interval = setInterval(() => {
         setElapsedTime(prev => {
           const newTime = prev + 1;
-          
+
           // Check if target time is reached
           const targetTime = getSubjectDuration(currentSession.subject) * 60;
           if (newTime >= targetTime && !isAlarmPlaying && !alarmMuted) {
             playAlarm();
           }
-          
+
           return newTime;
         });
       }, 1000);
@@ -118,53 +122,77 @@ const StudyTimer = () => {
   }, [currentSession]);
 
   // Play alarm when target time is reached
+
   const playAlarm = () => {
     if (alarmMuted) return;
-    
+
     setIsAlarmPlaying(true);
-    
-    // Play browser notification sound and show notification
+
+    // Request permission for browser notifications
+    if ('Notification' in window && Notification.permission !== 'granted') {
+      Notification.requestPermission();
+    }
+
+    // Show notification if permission is granted
     if ('Notification' in window && Notification.permission === 'granted') {
       new Notification('Study Session Complete! 🎉', {
         body: `You've completed your ${currentSession?.subject} study session!`,
         icon: '/android/android-launchericon-192-192.png',
-        tag: 'study-complete'
+        tag: 'study-complete',
       });
     }
 
-    // Play a simple beep sound using Web Audio API
-    const playBeep = () => {
-      if (!audioRef.current?.audioContext || alarmMuted) return;
-      
-      const source = audioRef.current.audioContext.createBufferSource();
-      const gainNode = audioRef.current.audioContext.createGain();
-      
-      source.buffer = audioRef.current.alarmBuffer;
-      source.connect(gainNode);
-      gainNode.connect(audioRef.current.audioContext.destination);
-      
-      gainNode.gain.setValueAtTime(0.3, audioRef.current.audioContext.currentTime);
-      source.start();
-    };
-
-    // Play beep every 2 seconds
+    // Start continuous alarm
     playBeep();
-    intervalRef.current = setInterval(() => {
-      if (!alarmMuted && isAlarmPlaying) {
-        playBeep();
-      }
-    }, 2000);
 
     toast.success('🎉 Study session target reached!', {
       duration: 5000,
-      position: 'top-center'
+      position: 'top-center',
     });
+  };
+
+  const playBeep = () => {
+    if (!audioRef.current?.audioContext || alarmMuted || intervalRef.current) return;
+
+    const audioContext = audioRef.current.audioContext;
+    const buffer = audioRef.current.alarmBuffer;
+
+    // Function to play a single beep
+    const playSingleBeep = () => {
+      const source = audioContext.createBufferSource();
+      const gainNode = audioContext.createGain();
+      source.buffer = buffer;
+      source.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+      source.start();
+      return source;
+    };
+
+    // Play beeps repeatedly
+    let isPlaying = true;
+    const scheduleBeep = () => {
+      if (!isPlaying) return;
+      const source = playSingleBeep();
+      source.onended = () => {
+        if (isPlaying) {
+          scheduleBeep();
+        }
+      };
+    };
+
+    scheduleBeep();
+
+    // Store cleanup function in intervalRef
+    intervalRef.current = () => {
+      isPlaying = false;
+    };
   };
 
   const stopAlarm = () => {
     setIsAlarmPlaying(false);
     if (intervalRef.current) {
-      clearInterval(intervalRef.current);
+      intervalRef.current();
       intervalRef.current = null;
     }
   };
@@ -184,6 +212,22 @@ const StudyTimer = () => {
       }
     }
   }, 1000);
+
+
+  const handleEndButtonClick = async () => {
+    setIsEnding(true);
+    try {
+      await saveSessionTime();
+
+      setTimeout(() => {
+        handleEndSession();         // Clear session after a short delay
+        setIsEnding(false);
+      }, 300);
+    } catch (err) {
+      console.error("Error ending session:", err);
+      setIsEnding(false);
+    }
+  };
 
   // Handle window visibility and page unload
   useEffect(() => {
@@ -482,13 +526,12 @@ const StudyTimer = () => {
             </motion.button>
 
             <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={async () => { await saveSessionTime(), handleEndSession() }}
+              onClick={handleEndButtonClick}
+              disabled={isEnding}
               className="bg-red-500 text-white px-6 py-3 rounded-xl flex items-center space-x-2"
             >
               <Square size={20} />
-              <span>End</span>
+              <span> {isEnding ? "Ending..." : "End"}</span>
             </motion.button>
           </div>
 

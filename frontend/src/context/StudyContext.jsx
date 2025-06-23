@@ -52,7 +52,7 @@ export const StudyProvider = ({ children }) => {
   const fetchDashboardAndTimetables = useCallback(async (force = false) => {
     const now = Date.now();
     const cacheTimeout = 5 * 60 * 1000; // 5 minutes
-    
+
     if (!force && now - lastFetchTime < cacheTimeout) {
       return; // Skip if recently fetched
     }
@@ -62,7 +62,7 @@ export const StudyProvider = ({ children }) => {
         axios.get(`${API_URL}/api/study/dashboard`),
         axios.get(`${API_URL}/api/study/timetables`)
       ]);
-      
+
       const active = timetableRes.data.find(t => t.isActive);
       setStudyData(prev => ({
         ...prev,
@@ -70,18 +70,18 @@ export const StudyProvider = ({ children }) => {
         timetables: timetableRes.data,
         activeTimetable: active
       }));
-      
+
       setLastFetchTime(now);
     } catch (err) {
       console.error('Failed to fetch dashboard/timetables:', err);
     }
   }, [API_URL, lastFetchTime]);
 
-  useEffect(() => {
-    fetchDashboardAndTimetables();
-    fetchActiveSessions();
-    fetchCompletedSubjects();
-  }, [fetchDashboardAndTimetables]);
+  // useEffect(() => {
+  //   fetchDashboardAndTimetables();
+  //   fetchActiveSessions();
+  //   fetchCompletedSubjects();
+  // }, [fetchDashboardAndTimetables]);
 
   const fetchActiveSessions = async () => {
     try {
@@ -318,9 +318,9 @@ export const StudyProvider = ({ children }) => {
   const getPendingSubjects = () => {
     const todaySchedule = getTodaySchedule();
     const completedSubjects = studyData.completedSubjects || [];
-    
+
     return todaySchedule.filter(scheduleItem => {
-      const isCompleted = completedSubjects.some(completed => 
+      const isCompleted = completedSubjects.some(completed =>
         completed.subject === scheduleItem.subject && completed.completed
       );
       return !isCompleted;

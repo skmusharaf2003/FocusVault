@@ -1,10 +1,16 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { HelpCircle, ChevronDown, ChevronUp, BookOpen, Clock, Calendar, FileText, MessageCircle, User, Search } from 'lucide-react';
+import { HelpCircle, ChevronDown, ArrowLeft, BookOpen, Clock, Calendar, FileText, MessageCircle, User, Search } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 const Help = () => {
   const [expandedFaq, setExpandedFaq] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const navigate = useNavigate();
+
+  const handleBack = () => {
+    navigate(-1);
+  };
 
   const faqs = [
     {
@@ -102,8 +108,19 @@ const Help = () => {
       <motion.div
         initial={{ y: -20, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        className="text-center"
+        className="text-center relative" // Added relative for positioning
       >
+        {/* Back Button */}
+        <motion.button
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          onClick={handleBack}
+          className="absolute left-0 top-1/2 transform -translate-y-1/2 flex items-center space-x-2 text-gray-600 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400"
+        >
+          <ArrowLeft size={20} />
+          <span className="text-sm font-medium">Back</span>
+        </motion.button>
+
         <div className="w-16 h-16 bg-gradient-to-br from-primary-500 to-secondary-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
           <HelpCircle className="text-white" size={32} />
         </div>

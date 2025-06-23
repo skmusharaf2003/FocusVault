@@ -17,9 +17,10 @@ import AuthCallback from './pages/auth/AuthCallback';
 import VerifyEmail from './pages/auth/VerifyEmail';
 import LoadingScreen from './components/ui/LoadingScreen';
 import StudySession from './components/study/StudySession';
+import FeedbackPage from './pages/Feedback';
 
 function App() {
-  const { user, loading } = useAuth();
+  const { user, loading, logout } = useAuth();
   const location = useLocation();
 
   if (loading) return <LoadingScreen />;
@@ -38,14 +39,15 @@ function App() {
 
         {user ? (
           <Route element={<MainLayout />}>
-            <Route path="/" element={<Home />} />
+            <Route path="/" element={<Home user={user} />} />
             <Route path="/reading" element={<ReadingSpace />} />
             <Route path="/todo" element={<Todo />} />
             <Route path="/calendar" element={<Calendar />} />
-            <Route path="/profile" element={<Profile />} />
+            <Route path="/profile" element={<Profile user={user} logout={logout} />} />
             <Route path="/session" element={<StudySession />} />
             <Route path="/help" element={<Help />} />
             <Route path="/about" element={<AboutUs />} />
+            <Route path="/feedback" element={<FeedbackPage user={user} />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         ) : (

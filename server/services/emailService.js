@@ -4,7 +4,7 @@ dotenv.config();
 
 class EmailService {
   constructor() {
-    this.transporter = nodemailer.createTransporter({
+    this.transporter = nodemailer.createTransport({
       host: process.env.SMTP_HOST || "smtp.gmail.com",
       port: process.env.SMTP_PORT || 587,
       secure: false,
@@ -132,13 +132,19 @@ class EmailService {
 
   async sendCalendarNotification(user, todayEvents, tomorrowEvents) {
     const formatEventsList = (events) => {
-      return events.map(event => {
-        const time = event.startTime ? ` at ${event.startTime}` : '';
-        return `<li style="margin-bottom: 8px;">
+      return events
+        .map((event) => {
+          const time = event.startTime ? ` at ${event.startTime}` : "";
+          return `<li style="margin-bottom: 8px;">
           <strong>${event.title}</strong>${time}
-          ${event.description ? `<br><span style="color: #666; font-size: 14px;">${event.description}</span>` : ''}
+          ${
+            event.description
+              ? `<br><span style="color: #666; font-size: 14px;">${event.description}</span>`
+              : ""
+          }
         </li>`;
-      }).join('');
+        })
+        .join("");
     };
 
     const mailOptions = {
@@ -152,29 +158,39 @@ class EmailService {
           </div>
           
           <div style="background: #f8f9fa; padding: 30px; border-radius: 0 0 10px 10px;">
-            <h2 style="color: #333; margin-bottom: 20px;">Hi ${user.name}! 👋</h2>
+            <h2 style="color: #333; margin-bottom: 20px;">Hi ${
+              user.name
+            }! 👋</h2>
             
             <p style="color: #666; line-height: 1.6; margin-bottom: 25px;">
               Here are your upcoming events to help you stay organized and prepared.
             </p>
             
-            ${todayEvents.length > 0 ? `
+            ${
+              todayEvents.length > 0
+                ? `
               <div style="background: #e8f5e8; padding: 20px; border-radius: 8px; margin: 20px 0;">
                 <h3 style="color: #2e7d32; margin: 0 0 15px 0;">📅 Today's Events</h3>
                 <ul style="margin: 0; padding-left: 20px; color: #333;">
                   ${formatEventsList(todayEvents)}
                 </ul>
               </div>
-            ` : ''}
+            `
+                : ""
+            }
             
-            ${tomorrowEvents.length > 0 ? `
+            ${
+              tomorrowEvents.length > 0
+                ? `
               <div style="background: #fff3e0; padding: 20px; border-radius: 8px; margin: 20px 0;">
                 <h3 style="color: #f57c00; margin: 0 0 15px 0;">📅 Tomorrow's Events</h3>
                 <ul style="margin: 0; padding-left: 20px; color: #333;">
                   ${formatEventsList(tomorrowEvents)}
                 </ul>
               </div>
-            ` : ''}
+            `
+                : ""
+            }
             
             <div style="text-align: center; margin: 30px 0;">
               <a href="${process.env.CLIENT_URL}/calendar" 

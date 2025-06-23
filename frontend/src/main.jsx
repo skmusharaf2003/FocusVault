@@ -10,6 +10,7 @@ import { SocketProvider } from './context/SocketContext.jsx';
 import { ChatProvider } from './context/ChatContext.jsx';
 import ErrorBoundary from './components/ui/ErrorBoundry.jsx';
 import './index.css';
+import { FeedbackProvider } from './context/FeedbackContext.jsx';
 
 // Register service worker for PWA
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
@@ -39,9 +40,11 @@ createRoot(document.getElementById('root')).render(
           <SocketProvider>
             <StudyProvider>
               <ChatProvider>
-                <ErrorBoundary>
-                  <App />
-                </ErrorBoundary>
+                <FeedbackProvider>
+                  <ErrorBoundary>
+                    <App />
+                  </ErrorBoundary>
+                </FeedbackProvider>
                 <Toaster
                   position="top-center"
                   toastOptions={{

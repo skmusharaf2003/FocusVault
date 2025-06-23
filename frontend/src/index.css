@@ -1,13 +1,12 @@
+@import url("https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400;1,700&display=swap");
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Import Atkinson Hyperlegible font for better accessibility */
-@import url('https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400;1,700&display=swap');
-
 /* Apply globally for better readability */
 * {
-  font-family: 'Atkinson Hyperlegible', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+  font-family: "Atkinson Hyperlegible", -apple-system, BlinkMacSystemFont,
+    "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", sans-serif;
 }
 
 /* Improve text readability */
@@ -19,7 +18,7 @@ body {
 
 /* Enhanced focus styles for accessibility */
 *:focus {
-  outline: 2px solid #8B5CF6;
+  outline: 2px solid #8b5cf6;
   outline-offset: 2px;
 }
 
@@ -28,4 +27,12 @@ body {
   body {
     color-scheme: dark;
   }
+}
+
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.hide-scrollbar {
+  -ms-overflow-style: none; /* IE/Edge */
+  scrollbar-width: none; /* Firefox */
 }

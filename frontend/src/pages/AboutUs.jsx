@@ -1,7 +1,10 @@
 import { motion } from 'framer-motion';
-import { BookOpen, Target, Users, Zap, Github, Mail, Heart, Shield, Database, Smartphone } from 'lucide-react';
+import { BookOpen, Target, Users, Zap, Github, Mail, Heart, Shield, Database, Smartphone, ArrowLeft } from 'lucide-react';
+import { useNavigate } from 'react-router-dom'; // Import useNavigate
 
 const AboutUs = () => {
+  const navigate = useNavigate(); // Initialize navigate hook
+
   const features = [
     {
       icon: Target,
@@ -34,15 +37,31 @@ const AboutUs = () => {
     { name: 'Socket.io', description: 'Real-time features' }
   ];
 
+  // Handle back navigation
+  const handleBack = () => {
+    navigate(-1); // Go back to the previous page
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 pb-20">
       <div className="container mx-auto px-4 py-6 max-w-4xl">
-        {/* Header */}
+        {/* Header with Back Button */}
         <motion.div
           initial={{ y: -20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
-          className="text-center mb-12"
+          className="text-center mb-12 relative" // Added relative for positioning
         >
+          {/* Back Button */}
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={handleBack}
+            className="absolute left-0 top-1/2 transform -translate-y-1/2 flex items-center space-x-2 text-gray-600 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400"
+          >
+            <ArrowLeft size={20} />
+            <span className="text-sm font-medium">Back</span>
+          </motion.button>
+
           <div className="w-20 h-20 bg-gradient-to-br from-primary-500 to-secondary-500 rounded-3xl flex items-center justify-center mx-auto mb-6">
             <BookOpen className="text-white" size={40} />
           </div>
@@ -66,7 +85,7 @@ const AboutUs = () => {
             <span>Our Mission</span>
           </h2>
           <p className="text-gray-600 dark:text-gray-300 leading-relaxed text-lg">
-            We believe that effective studying shouldn't be complicated. Focus Vault combines modern technology
+            I believe that effective studying shouldn't be complicated. Focus Vault combines modern technology
             with proven study techniques to create a seamless experience that adapts to your learning style.
             Whether you're a student, professional, or lifelong learner, our platform helps you build consistent
             study habits and achieve your educational goals.
@@ -182,17 +201,17 @@ const AboutUs = () => {
 
           <div className="flex flex-col sm:flex-row items-center justify-center space-y-4 sm:space-y-0 sm:space-x-6">
             <motion.a
-              href="mailto:support@focusvault.app"
+              href="mailto:skmusharaf01@gmail.com"
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               className="flex items-center space-x-2 bg-white/20 hover:bg-white/30 px-6 py-3 rounded-xl transition-colors"
             >
               <Mail size={20} />
-              <span>support@focusvault.app</span>
+              <span>skmusharaf01@gmail.com</span>
             </motion.a>
 
             <motion.a
-              href="https://github.com/focusvault/app"
+              href="https://github.com/musharraf10/FocusVault"
               target="_blank"
               rel="noopener noreferrer"
               whileHover={{ scale: 1.05 }}
@@ -213,7 +232,7 @@ const AboutUs = () => {
           className="text-center mt-8 text-gray-500 dark:text-gray-400"
         >
           <p className="text-sm">
-            Focus Vault v1.0.0 • Built with ❤️ for learners everywhere
+            Focus Vault v1.0.1 • Built with ❤️ for learners everywhere
           </p>
           <p className="text-xs mt-2">
             © 2025 Focus Vault. Made for educational purposes.

@@ -19,6 +19,7 @@ import todoRoutes from "./routes/todo.js";
 import calendarRoutes from "./routes/calendar.js";
 import userRoutes from "./routes/user.js";
 import chatRoutes from "./routes/chat.js";
+import feedback from "./routes/feedback.js";
 
 // Import middleware
 import { authMiddleware, requireEmailVerification } from "./middleware/auth.js";
@@ -109,6 +110,7 @@ app.use(
 );
 app.use("/api/user", authMiddleware, userRoutes);
 app.use("/api/chat", chatRoutes);
+app.use("/api/feedback", authMiddleware, requireEmailVerification, feedback);
 
 // Health check
 app.get("/api/health", (req, res) => {

@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { Filter, Grid, List } from "lucide-react";
+import { Filter, Grid, List, Lightbulb } from "lucide-react";
 import { format } from "date-fns";
 
 const getTimeBasedGreeting = () => {
@@ -9,7 +9,7 @@ const getTimeBasedGreeting = () => {
     return "Good Evening";
 };
 
-const Header = ({ user, toggleFilters }) => (
+const Header = ({ user }) => (
     <motion.div
         initial={{ y: -20, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
@@ -37,17 +37,6 @@ const Header = ({ user, toggleFilters }) => (
                     {format(new Date(), "EEEE, MMMM do")}
                 </p>
             </div>
-        </div>
-        <div className="flex items-center space-x-2">
-            <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={toggleFilters}
-                className="p-2 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700"
-            >
-                <Filter size={20} className="text-gray-600 dark:text-gray-300" />
-            </motion.button>
-
         </div>
     </motion.div>
 );
