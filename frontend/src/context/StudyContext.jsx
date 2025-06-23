@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useMemo } from 'react';
+import { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
 import axios from 'axios';
 
 const StudyContext = createContext();
@@ -17,6 +17,9 @@ export const StudyProvider = ({ children }) => {
     studySessions: 0,
     currentStreak: 0,
     highestStreak: 0,
+    totalStudyHours: 0,
+    totalSessions: 0,
+    subjectsStudied: [],
     weeklyData: [],
     timetables: [],
     activeTimetable: null,
@@ -28,6 +31,7 @@ export const StudyProvider = ({ children }) => {
   const [currentSession, setCurrentSession] = useState(null);
   const [isStudying, setIsStudying] = useState(false);
   const [loadingNotes, setLoadingNotes] = useState(false);
+  const [lastFetchTime, setLastFetchTime] = useState(0);
 
   const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
@@ -44,18 +48,21 @@ export const StudyProvider = ({ children }) => {
     }
   }, []);
 
-  useEffect(() => {
-    fetchDashboardAndTimetables();
-    fetchActiveSessions();
-    fetchCompletedSubjects();
-  }, []);
+  // Optimized fetch function with caching
+  const fetchDashboardAndTimetables = useCallback(async (force = false) => {
+    const now = Date.now();
+    const cacheTimeout = 5 * 60 * 1000; // 5 minutes
+    
+    if (!force && now - lastFetchTime < cacheTimeout) {
+      return; // Skip if recently fetched
+    }
 
-  const fetchDashboardAndTimetables = async () => {
     try {
       const [dashboardRes, timetableRes] = await Promise.all([
         axios.get(`${API_URL}/api/study/dashboard`),
         axios.get(`${API_URL}/api/study/timetables`)
       ]);
+      
       const active = timetableRes.data.find(t => t.isActive);
       setStudyData(prev => ({
         ...prev,
@@ -63,10 +70,18 @@ export const StudyProvider = ({ children }) => {
         timetables: timetableRes.data,
         activeTimetable: active
       }));
+      
+      setLastFetchTime(now);
     } catch (err) {
       console.error('Failed to fetch dashboard/timetables:', err);
     }
-  };
+  }, [API_URL, lastFetchTime]);
+
+  useEffect(() => {
+    fetchDashboardAndTimetables();
+    fetchActiveSessions();
+    fetchCompletedSubjects();
+  }, [fetchDashboardAndTimetables]);
 
   const fetchActiveSessions = async () => {
     try {
@@ -235,7 +250,7 @@ export const StudyProvider = ({ children }) => {
 
       // Refresh data
       await Promise.all([
-        fetchDashboardAndTimetables(),
+        fetchDashboardAndTimetables(true), // Force refresh
         fetchCompletedSubjects()
       ]);
 
@@ -292,6 +307,38 @@ export const StudyProvider = ({ children }) => {
     return activeSessions.find(session => session.subject === subject);
   };
 
+  const getTodaySchedule = () => {
+    const activeTimetable = studyData.activeTimetable;
+    if (!activeTimetable) return [];
+
+    const todayKey = new Date().toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
+    return activeTimetable.schedule?.[todayKey] || [];
+  };
+
+  const getPendingSubjects = () => {
+    const todaySchedule = getTodaySchedule();
+    const completedSubjects = studyData.completedSubjects || [];
+    
+    return todaySchedule.filter(scheduleItem => {
+      const isCompleted = completedSubjects.some(completed => 
+        completed.subject === scheduleItem.subject && completed.completed
+      );
+      return !isCompleted;
+    });
+  };
+
+  const getSubjectActualTime = (subject) => {
+    const completed = studyData.completedSubjects.find(s => s.subject === subject);
+    if (completed) return completed.actualTime || 0;
+
+    const paused = getPausedSessions().find(s => s.subject === subject);
+    if (paused) return paused.elapsedTime || 0;
+
+    if (currentSession?.subject === subject) return currentSession.elapsedTime || 0;
+
+    return 0;
+  };
+
   const value = useMemo(() => ({
     studyData,
     activeSessions,
@@ -313,12 +360,16 @@ export const StudyProvider = ({ children }) => {
     getPausedSessions,
     getActiveSession,
     getSessionBySubject,
+    getTodaySchedule,
+    getPendingSubjects,
+    getSubjectActualTime,
   }), [
     studyData,
     activeSessions,
     currentSession,
     isStudying,
-    loadingNotes
+    loadingNotes,
+    fetchDashboardAndTimetables
   ]);
 
   return (

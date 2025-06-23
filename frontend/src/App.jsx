@@ -9,6 +9,7 @@ import Calendar from './pages/Calendar';
 import Profile from './pages/Profile';
 import Help from './pages/Help';
 import AboutUs from './pages/AboutUs';
+import TermsAndConditions from './pages/TermsAndConditions';
 import Login from './pages/auth/Login';
 import Register from './pages/auth/Register';
 import EmailVerification from './pages/auth/EmailVerification';
@@ -29,11 +30,11 @@ function App() {
     return <EmailVerification />;
   }
 
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
       <Routes>
         <Route path="/verify-email/:token" element={<VerifyEmail />} />
+        <Route path="/terms" element={<TermsAndConditions />} />
 
         {user ? (
           <Route element={<MainLayout />}>

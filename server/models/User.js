@@ -90,6 +90,18 @@ const userSchema = new mongoose.Schema({
       type: Number,
       default: 0
     },
+    totalStudyHours: {
+      type: Number,
+      default: 0
+    },
+    totalSessions: {
+      type: Number,
+      default: 0
+    },
+    subjectsStudied: {
+      type: [String],
+      default: []
+    },
     currentStreak: {
       type: Number,
       default: 0
@@ -100,7 +112,26 @@ const userSchema = new mongoose.Schema({
     },
     lastStudyDate: {
       type: Date
-    }
+    },
+    dailyStats: [{
+      date: {
+        type: Date,
+        required: true
+      },
+      totalTime: {
+        type: Number,
+        default: 0
+      },
+      sessions: {
+        type: Number,
+        default: 0
+      },
+      subjects: [{
+        name: String,
+        time: Number,
+        sessions: Number
+      }]
+    }]
   },
   lastNotificationSent: {
     type: Date

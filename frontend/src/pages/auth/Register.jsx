@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Mail, Lock, User, Eye, EyeOff, BookOpen } from 'lucide-react';
+import { Mail, Lock, User, Eye, EyeOff, BookOpen, ExternalLink } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import toast from 'react-hot-toast';
 
@@ -16,9 +16,15 @@ const Register = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    if (!acceptedTerms) {
+      toast.error('Please accept the Terms and Conditions to continue');
+      return;
+    }
 
     if (formData.password !== formData.confirmPassword) {
       toast.error('Passwords do not match');
@@ -42,6 +48,10 @@ const Register = () => {
   };
 
   const handleGoogleRegister = () => {
+    if (!acceptedTerms) {
+      toast.error('Please accept the Terms and Conditions to continue');
+      return;
+    }
     window.location.href = `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/auth/google`;
   };
 
@@ -216,6 +226,34 @@ const Register = () => {
           </div>
         </motion.div>
 
+        {/* Terms and Conditions Checkbox */}
+        <motion.div
+          initial={{ x: -20, opacity: 0 }}
+          animate={{ x: 0, opacity: 1 }}
+          transition={{ delay: 0.85 }}
+          className="flex items-start space-x-3"
+        >
+          <input
+            type="checkbox"
+            id="acceptTerms"
+            checked={acceptedTerms}
+            onChange={(e) => setAcceptedTerms(e.target.checked)}
+            className="w-4 h-4 text-primary-600 bg-gray-100 border-gray-300 rounded focus:ring-primary-500 dark:focus:ring-primary-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600 mt-1"
+          />
+          <label htmlFor="acceptTerms" className="text-sm text-gray-600 dark:text-gray-300">
+            I accept the{' '}
+            <Link
+              to="/terms"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary-600 hover:text-primary-700 font-medium inline-flex items-center space-x-1"
+            >
+              <span>Terms and Conditions</span>
+              <ExternalLink size={12} />
+            </Link>
+          </label>
+        </motion.div>
+
         <motion.button
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
@@ -223,7 +261,7 @@ const Register = () => {
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
           type="submit"
-          disabled={isLoading}
+          disabled={isLoading || !acceptedTerms}
           className="w-full bg-gradient-to-r from-primary-600 to-secondary-600 text-white py-3 rounded-xl font-medium disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isLoading ? 'Creating Account...' : 'Create Account'}

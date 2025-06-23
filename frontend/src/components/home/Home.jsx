@@ -5,7 +5,7 @@ import {
     PieChart as RechartsPieChart, Pie, Cell, LineChart, Line, AreaChart, Area,
     RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, Tooltip, Legend
 } from "recharts";
-import { BarChart3, Target, Activity, BookOpen, Calendar, PieChart, TrendingUp, Trophy, CheckCircle } from "lucide-react";
+import { BarChart3, Target, Activity, BookOpen, Calendar, PieChart, TrendingUp, Trophy, CheckCircle, Filter, Clock, Users } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { useStudy } from "../../context/StudyContext";
 import Header from "./Header";
@@ -14,6 +14,9 @@ import StatsGrid from "./StatsGrid";
 import FilterPanel from "./FilterPanel";
 import ChartCard from "./ChartCard";
 import SessionsList from "./SessionsList";
+import axios from "axios";
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 const Home = () => {
     const { user } = useAuth();
@@ -28,6 +31,8 @@ const Home = () => {
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage] = useState(10);
     const [detailedStats, setDetailedStats] = useState(null);
+    const [analytics, setAnalytics] = useState(null);
+    const [loading, setLoading] = useState(false);
 
     const colors = ["#8B5CF6", "#3B82F6", "#10B981", "#F59E0B", "#EF4444", "#6366F1", "#14B8A6", "#D946EF"];
 
@@ -35,21 +40,33 @@ const Home = () => {
     useEffect(() => {
         const fetchData = async () => {
             try {
+                setLoading(true);
                 await fetchDashboardAndTimetables();
                 const stats = await fetchSessionStats(dateRange, selectedSubjects.join(","));
                 setDetailedStats(stats);
+                
+                // Fetch enhanced analytics
+                const analyticsResponse = await axios.get(`${API_URL}/api/study/analytics`, {
+                    params: {
+                        period: dateRange,
+                        subject: selectedSubjects.length > 0 ? selectedSubjects[0] : undefined
+                    }
+                });
+                setAnalytics(analyticsResponse.data);
             } catch (error) {
                 console.error("Failed to fetch data:", error);
+            } finally {
+                setLoading(false);
             }
         };
 
         const cacheKey = `stats_${dateRange}_${selectedSubjects.join("_")}`;
         const cachedStats = localStorage.getItem(cacheKey);
-        if (cachedStats) {
+        if (cachedStats && !loading) {
             setDetailedStats(JSON.parse(cachedStats));
-        } else {
-            fetchData();
         }
+        
+        fetchData();
     }, [dateRange, selectedSubjects, fetchSessionStats, fetchDashboardAndTimetables]);
 
     // Cache stats
@@ -165,8 +182,9 @@ const Home = () => {
 
     const views = [
         { id: "overview", label: "Overview", icon: BarChart3 },
+        { id: "analytics", label: "Analytics", icon: TrendingUp },
         { id: "performance", label: "Performance", icon: Target },
-        { id: "sessions", label: "Sessions", icon: BookOpen },
+        { id: "sessions", label: "Sessions",  icon: BookOpen },
     ];
 
     return (
@@ -175,9 +193,9 @@ const Home = () => {
                 <Header
                     user={user}
                     toggleFilters={() => setShowFilters(!showFilters)}
-
                 />
                 <QuoteCard quote={quote} setQuote={setQuote} />
+                
                 <motion.div
                     initial={{ y: 20, opacity: 0 }}
                     animate={{ y: 0, opacity: 1 }}
@@ -199,6 +217,7 @@ const Home = () => {
                         </motion.button>
                     ))}
                 </motion.div>
+                
                 <FilterPanel
                     showFilters={showFilters}
                     searchQuery={searchQuery}
@@ -212,6 +231,7 @@ const Home = () => {
                     uniqueSubjects={uniqueSubjects}
                     subjectData={subjectData}
                 />
+                
                 <AnimatePresence mode="wait">
                     <motion.div
                         key={activeView}
@@ -242,7 +262,6 @@ const Home = () => {
                                     </div>
                                 </ChartCard>
                                 <div className="grid md:grid-cols-2 gap-6">
-
                                     <ChartCard title="Time Distribution" icon={PieChart}>
                                         <div className="h-80 px-2 pb-4">
                                             {subjectData && subjectData.length > 0 ? (
@@ -311,10 +330,124 @@ const Home = () => {
                                             </div>
                                         )}
                                     </ChartCard>
-
                                 </div>
                             </div>
                         )}
+
+                        {activeView === "analytics" && analytics && (
+                            <div className="space-y-6">
+                                {/* Enhanced Stats Grid */}
+                                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                                    <motion.div
+                                        initial={{ scale: 0.9, opacity: 0 }}
+                                        animate={{ scale: 1, opacity: 1 }}
+                                        className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20 rounded-2xl p-4 text-center"
+                                    >
+                                        <div className="w-10 h-10 bg-blue-500 rounded-xl flex items-center justify-center mx-auto mb-2">
+                                            <Clock className="text-white" size={20} />
+                                        </div>
+                                        <p className="text-2xl font-bold text-blue-600">{analytics.userStats.totalStudyHours}h</p>
+                                        <p className="text-xs text-blue-600 font-medium">Total Hours</p>
+                                    </motion.div>
+
+                                    <motion.div
+                                        initial={{ scale: 0.9, opacity: 0 }}
+                                        animate={{ scale: 1, opacity: 1 }}
+                                        transition={{ delay: 0.1 }}
+                                        className="bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/20 rounded-2xl p-4 text-center"
+                                    >
+                                        <div className="w-10 h-10 bg-green-500 rounded-xl flex items-center justify-center mx-auto mb-2">
+                                            <BookOpen className="text-white" size={20} />
+                                        </div>
+                                        <p className="text-2xl font-bold text-green-600">{analytics.userStats.totalSessions}</p>
+                                        <p className="text-xs text-green-600 font-medium">Total Sessions</p>
+                                    </motion.div>
+
+                                    <motion.div
+                                        initial={{ scale: 0.9, opacity: 0 }}
+                                        animate={{ scale: 1, opacity: 1 }}
+                                        transition={{ delay: 0.2 }}
+                                        className="bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900/20 dark:to-purple-800/20 rounded-2xl p-4 text-center"
+                                    >
+                                        <div className="w-10 h-10 bg-purple-500 rounded-xl flex items-center justify-center mx-auto mb-2">
+                                            <Users className="text-white" size={20} />
+                                        </div>
+                                        <p className="text-2xl font-bold text-purple-600">{analytics.userStats.subjectsStudied.length}</p>
+                                        <p className="text-xs text-purple-600 font-medium">Subjects</p>
+                                    </motion.div>
+
+                                    <motion.div
+                                        initial={{ scale: 0.9, opacity: 0 }}
+                                        animate={{ scale: 1, opacity: 1 }}
+                                        transition={{ delay: 0.3 }}
+                                        className="bg-gradient-to-br from-orange-50 to-orange-100 dark:from-orange-900/20 dark:to-orange-800/20 rounded-2xl p-4 text-center"
+                                    >
+                                        <div className="w-10 h-10 bg-orange-500 rounded-xl flex items-center justify-center mx-auto mb-2">
+                                            <Trophy className="text-white" size={20} />
+                                        </div>
+                                        <p className="text-2xl font-bold text-orange-600">{analytics.userStats.currentStreak}</p>
+                                        <p className="text-xs text-orange-600 font-medium">Day Streak</p>
+                                    </motion.div>
+                                </div>
+
+                                {/* Daily Progress Chart */}
+                                <ChartCard title="Daily Study Progress" icon={TrendingUp}>
+                                    <div className="h-64">
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <AreaChart data={analytics.dailyStats}>
+                                                <defs>
+                                                    <linearGradient id="dailyGradient" x1="0" y1="0" x2="0" y2="1">
+                                                        <stop offset="5%" stopColor="#10B981" stopOpacity={0.3} />
+                                                        <stop offset="95%" stopColor="#10B981" stopOpacity={0} />
+                                                    </linearGradient>
+                                                </defs>
+                                                <XAxis 
+                                                    dataKey="date" 
+                                                    axisLine={false} 
+                                                    tickLine={false}
+                                                    tickFormatter={(value) => new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                                />
+                                                <YAxis hide />
+                                                <Tooltip 
+                                                    labelFormatter={(value) => new Date(value).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+                                                    formatter={(value, name) => [
+                                                        name === 'totalTime' ? `${Math.round(value / 60)} minutes` : value,
+                                                        name === 'totalTime' ? 'Study Time' : 'Sessions'
+                                                    ]}
+                                                />
+                                                <Area type="monotone" dataKey="totalTime" stroke="#10B981" fillOpacity={1} fill="url(#dailyGradient)" />
+                                            </AreaChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                </ChartCard>
+
+                                {/* Subject Breakdown */}
+                                <ChartCard title="Subject Performance Breakdown" icon={BarChart3}>
+                                    <div className="space-y-4">
+                                        {Object.entries(analytics.subjectBreakdown).map(([subject, data], index) => (
+                                            <div key={subject} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700 rounded-xl">
+                                                <div className="flex items-center space-x-3">
+                                                    <div 
+                                                        className="w-4 h-4 rounded-full"
+                                                        style={{ backgroundColor: colors[index % colors.length] }}
+                                                    />
+                                                    <span className="font-medium text-gray-800 dark:text-white">{subject}</span>
+                                                </div>
+                                                <div className="text-right">
+                                                    <div className="font-medium text-gray-800 dark:text-white">
+                                                        {Math.round(data.totalTime / 60)} min
+                                                    </div>
+                                                    <div className="text-sm text-gray-500">
+                                                        {data.sessions} sessions • {Math.round(data.averageTime / 60)} min avg
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </ChartCard>
+                            </div>
+                        )}
+
                         {activeView === "performance" && (
                             <div className="space-y-6">
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -382,13 +515,13 @@ const Home = () => {
 
                                 {radarData.length > 0 && (
                                     <ChartCard title="Subject Analysis">
-                                        <div className="h-72 px-4 pb-6"> {/* Added padding and more height */}
+                                        <div className="h-72 px-4 pb-6">
                                             <ResponsiveContainer width="100%" height="100%">
                                                 <RadarChart data={radarData} outerRadius="80%">
                                                     <PolarGrid />
                                                     <PolarAngleAxis
                                                         dataKey="subject"
-                                                        tick={{ fontSize: 12, dy: 4 }} // Adds padding to labels
+                                                        tick={{ fontSize: 12, dy: 4 }}
                                                     />
                                                     <PolarRadiusAxis angle={90} domain={[0, 100]} />
                                                     <Radar
@@ -413,19 +546,17 @@ const Home = () => {
                                                         fillOpacity={0.2}
                                                     />
                                                     <Tooltip />
-                                                    <Legend wrapperStyle={{ bottom: -20 }} /> {/* Space below chart */}
+                                                    <Legend wrapperStyle={{ bottom: -20 }} />
                                                 </RadarChart>
                                             </ResponsiveContainer>
                                         </div>
                                     </ChartCard>
-
                                 )}
                             </div>
                         )}
                         {activeView === "sessions" && (
                             <SessionsList
                                 paginatedSessions={paginatedSessions}
-
                                 currentPage={currentPage}
                                 setCurrentPage={setCurrentPage}
                                 totalPages={totalPages}

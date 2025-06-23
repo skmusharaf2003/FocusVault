@@ -1,3 +1,31 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Import Atkinson Hyperlegible font for better accessibility */
+@import url('https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400;1,700&display=swap');
+
+/* Apply globally for better readability */
+* {
+  font-family: 'Atkinson Hyperlegible', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+}
+
+/* Improve text readability */
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* Enhanced focus styles for accessibility */
+*:focus {
+  outline: 2px solid #8B5CF6;
+  outline-offset: 2px;
+}
+
+/* Better contrast for dark mode */
+@media (prefers-color-scheme: dark) {
+  body {
+    color-scheme: dark;
+  }
+}

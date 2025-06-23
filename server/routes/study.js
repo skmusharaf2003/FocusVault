@@ -4,6 +4,7 @@ import Timetable from "../models/Timetable.js";
 import Note from "../models/Note.js";
 import User from "../models/User.js";
 import UserStudyState from "../models/UserStudyState.js";
+import CalendarEvent from "../models/CalendarEvent.js";
 import { v4 as uuidv4 } from "uuid";
 
 const router = express.Router();
@@ -79,6 +80,9 @@ router.get("/dashboard", async (req, res) => {
       studySessions: todaySessions.length,
       currentStreak: user?.stats?.currentStreak || 0,
       highestStreak: user?.stats?.highestStreak || 0,
+      totalStudyHours: user?.stats?.totalStudyHours || 0,
+      totalSessions: user?.stats?.totalSessions || 0,
+      subjectsStudied: user?.stats?.subjectsStudied || [],
       weeklyData,
       completedSubjects: todaySessions.filter((s) => s.completed),
     };
@@ -242,7 +246,7 @@ router.post("/state/:sessionId/end", async (req, res) => {
     await UserStudyState.deleteOne({ _id: session._id });
 
     // Update user stats
-    await updateUserStats(userId, session.elapsedTime);
+    await updateUserStats(userId, session.elapsedTime, session.subject);
 
     res.json({
       message: "Session completed successfully",
@@ -277,7 +281,7 @@ router.delete("/state/:sessionId", async (req, res) => {
 });
 
 // Helper function to update user stats
-async function updateUserStats(userId, sessionTime) {
+async function updateUserStats(userId, sessionTime, subject) {
   try {
     const user = await User.findById(userId);
     if (!user) return;
@@ -285,8 +289,42 @@ async function updateUserStats(userId, sessionTime) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    // Update total study time
+    // Update total study time and hours
     user.stats.totalStudyTime = (user.stats.totalStudyTime || 0) + sessionTime;
+    user.stats.totalStudyHours = Math.round((user.stats.totalStudyTime / 3600) * 100) / 100;
+    user.stats.totalSessions = (user.stats.totalSessions || 0) + 1;
+
+    // Update subjects studied
+    if (!user.stats.subjectsStudied.includes(subject)) {
+      user.stats.subjectsStudied.push(subject);
+    }
+
+    // Update daily stats
+    let todayStats = user.stats.dailyStats.find(stat => 
+      stat.date.toDateString() === today.toDateString()
+    );
+
+    if (!todayStats) {
+      todayStats = {
+        date: today,
+        totalTime: 0,
+        sessions: 0,
+        subjects: []
+      };
+      user.stats.dailyStats.push(todayStats);
+    }
+
+    todayStats.totalTime += sessionTime;
+    todayStats.sessions += 1;
+
+    // Update subject stats for today
+    let subjectStats = todayStats.subjects.find(s => s.name === subject);
+    if (!subjectStats) {
+      subjectStats = { name: subject, time: 0, sessions: 0 };
+      todayStats.subjects.push(subjectStats);
+    }
+    subjectStats.time += sessionTime;
+    subjectStats.sessions += 1;
 
     // Update streak
     const lastStudyDate = user.stats.lastStudyDate;
@@ -310,11 +348,136 @@ async function updateUserStats(userId, sessionTime) {
       }
     }
 
+    // Keep only last 30 days of daily stats
+    user.stats.dailyStats = user.stats.dailyStats
+      .filter(stat => {
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        return stat.date >= thirtyDaysAgo;
+      })
+      .sort((a, b) => b.date - a.date);
+
     await user.save();
   } catch (error) {
     console.error("Update user stats error:", error);
   }
 }
+
+// Get enhanced analytics
+router.get("/analytics", async (req, res) => {
+  try {
+    const userId = req.userId;
+    const { period = 'week', subject, startDate, endDate } = req.query;
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    let dateFilter = {};
+    const now = new Date();
+
+    if (startDate && endDate) {
+      dateFilter = {
+        date: {
+          $gte: new Date(startDate),
+          $lte: new Date(endDate)
+        }
+      };
+    } else {
+      switch (period) {
+        case 'month':
+          const monthAgo = new Date(now);
+          monthAgo.setMonth(monthAgo.getMonth() - 1);
+          dateFilter = { date: { $gte: monthAgo } };
+          break;
+        case 'year':
+          const yearAgo = new Date(now);
+          yearAgo.setFullYear(yearAgo.getFullYear() - 1);
+          dateFilter = { date: { $gte: yearAgo } };
+          break;
+        case 'week':
+        default:
+          const weekAgo = new Date(now);
+          weekAgo.setDate(weekAgo.getDate() - 7);
+          dateFilter = { date: { $gte: weekAgo } };
+      }
+    }
+
+    // Filter daily stats
+    let dailyStats = user.stats.dailyStats.filter(stat => {
+      if (dateFilter.date) {
+        return stat.date >= dateFilter.date.$gte && 
+               (!dateFilter.date.$lte || stat.date <= dateFilter.date.$lte);
+      }
+      return true;
+    });
+
+    // Filter by subject if specified
+    if (subject) {
+      dailyStats = dailyStats.map(day => ({
+        ...day.toObject(),
+        subjects: day.subjects.filter(s => s.name === subject),
+        totalTime: day.subjects
+          .filter(s => s.name === subject)
+          .reduce((sum, s) => sum + s.time, 0),
+        sessions: day.subjects
+          .filter(s => s.name === subject)
+          .reduce((sum, s) => sum + s.sessions, 0)
+      })).filter(day => day.subjects.length > 0);
+    }
+
+    // Calculate summary stats
+    const totalTime = dailyStats.reduce((sum, day) => sum + day.totalTime, 0);
+    const totalSessions = dailyStats.reduce((sum, day) => sum + day.sessions, 0);
+    const averageSessionTime = totalSessions > 0 ? totalTime / totalSessions : 0;
+
+    // Subject breakdown
+    const subjectBreakdown = {};
+    dailyStats.forEach(day => {
+      day.subjects.forEach(subj => {
+        if (!subjectBreakdown[subj.name]) {
+          subjectBreakdown[subj.name] = {
+            totalTime: 0,
+            sessions: 0,
+            averageTime: 0
+          };
+        }
+        subjectBreakdown[subj.name].totalTime += subj.time;
+        subjectBreakdown[subj.name].sessions += subj.sessions;
+      });
+    });
+
+    // Calculate averages
+    Object.keys(subjectBreakdown).forEach(subject => {
+      const data = subjectBreakdown[subject];
+      data.averageTime = data.sessions > 0 ? data.totalTime / data.sessions : 0;
+    });
+
+    res.json({
+      summary: {
+        totalTime,
+        totalSessions,
+        averageSessionTime,
+        totalHours: Math.round((totalTime / 3600) * 100) / 100,
+        daysActive: dailyStats.length,
+        period
+      },
+      dailyStats: dailyStats.sort((a, b) => new Date(a.date) - new Date(b.date)),
+      subjectBreakdown,
+      userStats: {
+        totalStudyHours: user.stats.totalStudyHours,
+        totalSessions: user.stats.totalSessions,
+        currentStreak: user.stats.currentStreak,
+        highestStreak: user.stats.highestStreak,
+        subjectsStudied: user.stats.subjectsStudied
+      }
+    });
+  } catch (error) {
+    console.error("Analytics error:", error);
+    res.status(500).json({ message: "Failed to fetch analytics" });
+  }
+});
 
 router.get("/sessions", async (req, res) => {
   try {
@@ -490,6 +653,9 @@ router.post("/sessions", async (req, res) => {
       notes: notes || "",
     });
 
+    // Update user stats
+    await updateUserStats(userId, actualTime, subject);
+
     res.status(201).json(session);
   } catch (error) {
     console.error("Error creating study session:", error);
@@ -553,6 +719,33 @@ router.get("/quote", async (req, res) => {
     res.status(200).json(data);
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch quote" });
+  }
+});
+
+// Calendar notifications endpoint
+router.get("/notifications/calendar", async (req, res) => {
+  try {
+    const userId = req.userId;
+    const today = new Date();
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    
+    // Get today's and tomorrow's events
+    const upcomingEvents = await CalendarEvent.find({
+      userId,
+      date: {
+        $gte: today,
+        $lte: tomorrow
+      }
+    }).sort({ date: 1, startTime: 1 });
+
+    res.json({
+      events: upcomingEvents,
+      count: upcomingEvents.length
+    });
+  } catch (error) {
+    console.error("Calendar notifications error:", error);
+    res.status(500).json({ message: "Failed to fetch calendar notifications" });
   }
 });
 

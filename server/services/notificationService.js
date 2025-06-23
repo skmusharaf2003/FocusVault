@@ -1,6 +1,7 @@
 import cron from 'node-cron';
 import User from '../models/User.js';
 import StudySession from '../models/StudySession.js';
+import CalendarEvent from '../models/CalendarEvent.js';
 import emailService from './emailService.js';
 
 class NotificationService {
@@ -13,6 +14,11 @@ class NotificationService {
     // Check for study reminders every hour
     cron.schedule('0 * * * *', () => {
       this.checkStudyReminders();
+    });
+
+    // Check for calendar notifications daily at 8 AM
+    cron.schedule('0 8 * * *', () => {
+      this.sendCalendarNotifications();
     });
 
     console.log('Notification service initialized with cron jobs');
@@ -59,6 +65,78 @@ class NotificationService {
       }
     } catch (error) {
       console.error('Error checking study reminders:', error);
+    }
+  }
+
+  async sendCalendarNotifications() {
+    try {
+      const today = new Date();
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+
+      // Get all users with notifications enabled
+      const users = await User.find({
+        'preferences.notifications': true,
+        emailVerified: true
+      });
+
+      for (const user of users) {
+        // Get upcoming events for today and tomorrow
+        const upcomingEvents = await CalendarEvent.find({
+          userId: user._id,
+          date: {
+            $gte: today,
+            $lte: tomorrow
+          }
+        }).sort({ date: 1, startTime: 1 });
+
+        if (upcomingEvents.length > 0) {
+          await this.sendCalendarNotification(user, upcomingEvents);
+        }
+      }
+    } catch (error) {
+      console.error('Error sending calendar notifications:', error);
+    }
+  }
+
+  async sendCalendarNotification(user, events) {
+    try {
+      const todayEvents = events.filter(event => {
+        const eventDate = new Date(event.date);
+        const today = new Date();
+        return eventDate.toDateString() === today.toDateString();
+      });
+
+      const tomorrowEvents = events.filter(event => {
+        const eventDate = new Date(event.date);
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        return eventDate.toDateString() === tomorrow.toDateString();
+      });
+
+      // Send web push notification
+      if ('Notification' in window && Notification.permission === 'granted') {
+        const notificationText = todayEvents.length > 0 
+          ? `You have ${todayEvents.length} event(s) today`
+          : `You have ${tomorrowEvents.length} event(s) tomorrow`;
+
+        this.io.to(`user:${user._id}`).emit('notification', {
+          type: 'calendar_reminder',
+          title: '📅 Upcoming Events',
+          message: notificationText,
+          timestamp: new Date(),
+          events: events.slice(0, 3) // Send first 3 events
+        });
+      }
+
+      // Send email notification
+      if (user.preferences.emailNotifications) {
+        await emailService.sendCalendarNotification(user, todayEvents, tomorrowEvents);
+      }
+
+      console.log(`Calendar notification sent to ${user.email}`);
+    } catch (error) {
+      console.error(`Failed to send calendar notification to ${user.email}:`, error);
     }
   }
 

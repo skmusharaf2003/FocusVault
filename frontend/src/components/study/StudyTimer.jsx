@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { Play, Pause, Square, Clock, Target, Book, CheckCircle, PauseCircle, Save, ArrowLeft, Home } from 'lucide-react';
+import { Play, Pause, Square, Clock, Target, Book, CheckCircle, PauseCircle, Save, ArrowLeft, Home, Volume2, VolumeX } from 'lucide-react';
 import { useStudy } from '../../context/StudyContext';
 import { useNavigate } from 'react-router-dom';
 import { debounce } from 'lodash';
+import toast from 'react-hot-toast';
 
 const StudyTimer = () => {
   const {
@@ -27,9 +28,56 @@ const StudyTimer = () => {
   const [elapsedTime, setElapsedTime] = useState(0);
   const [sessionNotes, setSessionNotes] = useState('');
   const [showNotes, setShowNotes] = useState(false);
+  const [isAlarmPlaying, setIsAlarmPlaying] = useState(false);
+  const [alarmMuted, setAlarmMuted] = useState(false);
+  const audioRef = useRef(null);
+  const intervalRef = useRef(null);
 
   const getTodayKey = () =>
     new Date().toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
+
+  // Initialize audio
+  useEffect(() => {
+    // Create audio context for alarm
+    audioRef.current = new Audio();
+    audioRef.current.loop = true;
+    audioRef.current.volume = 0.7;
+    
+    // Use a simple beep sound (data URL for a 1kHz tone)
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+    
+    // Create a simple alarm sound using Web Audio API
+    const createAlarmSound = () => {
+      const sampleRate = audioContext.sampleRate;
+      const duration = 0.5; // 0.5 seconds
+      const frameCount = sampleRate * duration;
+      const arrayBuffer = audioContext.createBuffer(1, frameCount, sampleRate);
+      const channelData = arrayBuffer.getChannelData(0);
+      
+      for (let i = 0; i < frameCount; i++) {
+        // Create a beep sound at 800Hz
+        channelData[i] = Math.sin(2 * Math.PI * 800 * i / sampleRate) * 0.3;
+      }
+      
+      return arrayBuffer;
+    };
+
+    // Store the alarm sound
+    audioRef.current.alarmBuffer = createAlarmSound();
+    audioRef.current.audioContext = audioContext;
+
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+    };
+  }, []);
 
   // Fetch initial data
   useEffect(() => {
@@ -41,11 +89,21 @@ const StudyTimer = () => {
     let interval;
     if (isStudying && currentSession) {
       interval = setInterval(() => {
-        setElapsedTime(prev => prev + 1); // Only update local state
+        setElapsedTime(prev => {
+          const newTime = prev + 1;
+          
+          // Check if target time is reached
+          const targetTime = getSubjectDuration(currentSession.subject) * 60;
+          if (newTime >= targetTime && !isAlarmPlaying && !alarmMuted) {
+            playAlarm();
+          }
+          
+          return newTime;
+        });
       }, 1000);
     }
     return () => clearInterval(interval);
-  }, [isStudying, currentSession]);
+  }, [isStudying, currentSession, isAlarmPlaying, alarmMuted]);
 
   // Sync local state with context
   useEffect(() => {
@@ -55,14 +113,72 @@ const StudyTimer = () => {
     } else {
       setElapsedTime(0);
       setSessionNotes('');
+      stopAlarm();
     }
   }, [currentSession]);
+
+  // Play alarm when target time is reached
+  const playAlarm = () => {
+    if (alarmMuted) return;
+    
+    setIsAlarmPlaying(true);
+    
+    // Play browser notification sound and show notification
+    if ('Notification' in window && Notification.permission === 'granted') {
+      new Notification('Study Session Complete! 🎉', {
+        body: `You've completed your ${currentSession?.subject} study session!`,
+        icon: '/android/android-launchericon-192-192.png',
+        tag: 'study-complete'
+      });
+    }
+
+    // Play a simple beep sound using Web Audio API
+    const playBeep = () => {
+      if (!audioRef.current?.audioContext || alarmMuted) return;
+      
+      const source = audioRef.current.audioContext.createBufferSource();
+      const gainNode = audioRef.current.audioContext.createGain();
+      
+      source.buffer = audioRef.current.alarmBuffer;
+      source.connect(gainNode);
+      gainNode.connect(audioRef.current.audioContext.destination);
+      
+      gainNode.gain.setValueAtTime(0.3, audioRef.current.audioContext.currentTime);
+      source.start();
+    };
+
+    // Play beep every 2 seconds
+    playBeep();
+    intervalRef.current = setInterval(() => {
+      if (!alarmMuted && isAlarmPlaying) {
+        playBeep();
+      }
+    }, 2000);
+
+    toast.success('🎉 Study session target reached!', {
+      duration: 5000,
+      position: 'top-center'
+    });
+  };
+
+  const stopAlarm = () => {
+    setIsAlarmPlaying(false);
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+  };
+
+  const muteAlarm = () => {
+    setAlarmMuted(true);
+    stopAlarm();
+  };
 
   // Debounced session time update with retry logic
   const saveSessionTime = debounce(async () => {
     if (currentSession && isStudying) {
       try {
-        await updateSessionTime(currentSession.sessionId, elapsedTime, 3, 1000); // Add retries and delay
+        await updateSessionTime(currentSession.sessionId, elapsedTime, 3, 1000);
       } catch (error) {
         console.error('Failed to save session time:', error);
       }
@@ -127,6 +243,8 @@ const StudyTimer = () => {
         await startStudySession(selectedSubject, targetTime);
         setElapsedTime(0);
         setSessionNotes('');
+        setIsAlarmPlaying(false);
+        setAlarmMuted(false);
       } catch (error) {
         console.error('Failed to start session:', error);
       }
@@ -135,10 +253,11 @@ const StudyTimer = () => {
 
   const handlePauseSession = async () => {
     try {
+      stopAlarm();
       await pauseSession();
       await saveSessionTime();
-      await fetchDashboardAndTimetables(); // Refresh data
-      await fetchCompletedSubjects(); // Ensure completed subjects are updated
+      await fetchDashboardAndTimetables();
+      await fetchCompletedSubjects();
     } catch (error) {
       console.error('Failed to pause session:', error);
     }
@@ -147,7 +266,7 @@ const StudyTimer = () => {
   const handleResumeSession = async (sessionId = null) => {
     try {
       await resumeSession(sessionId);
-      await fetchDashboardAndTimetables(); // Refresh data
+      await fetchDashboardAndTimetables();
     } catch (error) {
       console.error('Failed to resume session:', error);
     }
@@ -155,13 +274,16 @@ const StudyTimer = () => {
 
   const handleEndSession = async () => {
     try {
+      stopAlarm();
       await saveSessionTime();
       await endSession(currentSession?.sessionId, sessionNotes);
       setElapsedTime(0);
       setSessionNotes('');
       setShowNotes(false);
-      await fetchDashboardAndTimetables(); // Refresh data
-      await fetchCompletedSubjects(); // Ensure completed subjects are updated
+      setIsAlarmPlaying(false);
+      setAlarmMuted(false);
+      await fetchDashboardAndTimetables();
+      await fetchCompletedSubjects();
     } catch (error) {
       console.error('Failed to end session:', error);
     }
@@ -246,6 +368,45 @@ const StudyTimer = () => {
             <span>Home</span>
           </motion.button>
         </div>
+
+        {/* Alarm Alert */}
+        {isAlarmPlaying && (
+          <motion.div
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="bg-gradient-to-r from-green-500 to-green-600 text-white p-4 rounded-2xl"
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center">
+                  <CheckCircle size={20} />
+                </div>
+                <div>
+                  <h3 className="font-bold">🎉 Target Time Reached!</h3>
+                  <p className="text-sm opacity-90">You've completed your study session goal!</p>
+                </div>
+              </div>
+              <div className="flex items-center space-x-2">
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={muteAlarm}
+                  className="p-2 bg-white/20 rounded-lg hover:bg-white/30 transition-colors"
+                >
+                  {alarmMuted ? <VolumeX size={16} /> : <Volume2 size={16} />}
+                </motion.button>
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={stopAlarm}
+                  className="px-4 py-2 bg-white/20 rounded-lg hover:bg-white/30 transition-colors font-medium"
+                >
+                  Continue
+                </motion.button>
+              </div>
+            </div>
+          </motion.div>
+        )}
 
         <div className="bg-gradient-to-br from-primary-50 to-secondary-50 dark:from-gray-800 dark:to-gray-700 rounded-2xl p-6 text-center">
           <div className="w-32 h-32 mx-auto mb-6 relative">
