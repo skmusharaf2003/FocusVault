@@ -6,10 +6,15 @@ import TimetableView from '../components/study/TimetableView';
 import NotesView from '../components/study/NotesView';
 import CompletedSubjects from '../components/study/CompletedSubjects';
 import ChatRoom from '../components/study/ChatRoom';
+import StudySession from '../components/study/StudySession';
+import { useStudy } from '../context/StudyContext';
+import { useNavigate } from 'react-router-dom';
 
 const ReadingSpace = () => {
   const [activeTab, setActiveTab] = useState('continue');
+  const [inSession, setInSession] = useState(false);
 
+  const navigate = useNavigate();
   const tabs = [
     { id: 'continue', label: 'Continue Reading', icon: Play },
     { id: 'timetable', label: 'Time Table', icon: Calendar },
@@ -19,9 +24,21 @@ const ReadingSpace = () => {
   ];
 
   const renderTabContent = () => {
+    if (inSession) {
+      return (
+        <StudySession
+          onNavigateBack={() => navigate('/reading')}
+          onNavigateHome={() => {
+            setInSession(false);
+            setActiveTab('continue');
+          }}
+        />
+      );
+    }
+
     switch (activeTab) {
       case 'continue':
-        return <StudyTimer />;
+        return <StudyTimer studyContext={useStudy} onNavigateToSession={() => navigate('/session')} />;
       case 'timetable':
         return <TimetableView />;
       case 'notes':
@@ -31,9 +48,10 @@ const ReadingSpace = () => {
       case 'chat':
         return <ChatRoom />;
       default:
-        return <StudyTimer />;
+        return <StudyTimer studyContext={useStudy} onNavigateToSession={() => navigate('/session')} />;
     }
   };
+
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -60,11 +78,10 @@ const ReadingSpace = () => {
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center space-x-2 px-4 py-2 rounded-xl font-medium whitespace-nowrap transition-all duration-200 ${
-                activeTab === tab.id
-                  ? 'bg-gradient-to-r from-primary-600 to-secondary-600 text-white shadow-lg'
-                  : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700'
-              }`}
+              className={`flex items-center space-x-2 px-4 py-2 rounded-xl font-medium whitespace-nowrap transition-all duration-200 ${activeTab === tab.id
+                ? 'bg-gradient-to-r from-primary-600 to-secondary-600 text-white shadow-lg'
+                : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700'
+                }`}
             >
               <tab.icon size={16} />
               <span className="text-sm">{tab.label}</span>

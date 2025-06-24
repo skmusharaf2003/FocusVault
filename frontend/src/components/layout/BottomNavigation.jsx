@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { Home, BookOpen, CheckSquare, Calendar, User } from 'lucide-react';
+import { Home, BookOpen, CheckSquare, Calendar, User, HelpCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 const BottomNavigation = () => {

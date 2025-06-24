@@ -4,6 +4,8 @@ import Timetable from "../models/Timetable.js";
 import Note from "../models/Note.js";
 import User from "../models/User.js";
 import UserStudyState from "../models/UserStudyState.js";
+import CalendarEvent from "../models/CalendarEvent.js";
+import { v4 as uuidv4 } from "uuid";
 
 const router = express.Router();
 
@@ -28,7 +30,7 @@ router.get("/dashboard", async (req, res) => {
     // Get today's study sessions
     const todaySessions = await StudySession.find({
       userId,
-      date: { $gte: today, $lt: tomorrow },
+      createdAt: { $gte: today, $lt: tomorrow },
     });
 
     // Get user stats
@@ -40,7 +42,7 @@ router.get("/dashboard", async (req, res) => {
 
     const weeklySessions = await StudySession.find({
       userId,
-      date: { $gte: weekStart, $lt: tomorrow },
+      createdAt: { $gte: weekStart, $lt: tomorrow },
     });
 
     // Calculate daily totals for the week
@@ -53,11 +55,11 @@ router.get("/dashboard", async (req, res) => {
       dayEnd.setDate(dayEnd.getDate() + 1);
 
       const daySessions = weeklySessions.filter(
-        (session) => session.date >= dayStart && session.date < dayEnd
+        (session) => session.createdAt >= dayStart && session.createdAt < dayEnd
       );
 
       const totalMinutes = daySessions.reduce(
-        (sum, session) => sum + session.actualTime,
+        (sum, session) => sum + (session.actualTime || 0),
         0
       );
 
@@ -71,11 +73,16 @@ router.get("/dashboard", async (req, res) => {
     const dashboardData = {
       todayReading:
         Math.round(
-          (todaySessions.reduce((sum, s) => sum + s.actualTime, 0) / 60) * 10
+          (todaySessions.reduce((sum, s) => sum + (s.actualTime || 0), 0) /
+            60) *
+            10
         ) / 10,
       studySessions: todaySessions.length,
-      currentStreak: user.stats.currentStreak,
-      highestStreak: user.stats.highestStreak,
+      currentStreak: user?.stats?.currentStreak || 0,
+      highestStreak: user?.stats?.highestStreak || 0,
+      totalStudyHours: user?.stats?.totalStudyHours || 0,
+      totalSessions: user?.stats?.totalSessions || 0,
+      subjectsStudied: user?.stats?.subjectsStudied || [],
       weeklyData,
       completedSubjects: todaySessions.filter((s) => s.completed),
     };
@@ -87,6 +94,388 @@ router.get("/dashboard", async (req, res) => {
   } catch (error) {
     console.error("Dashboard error:", error);
     res.status(500).json({ message: "Failed to fetch dashboard data" });
+  }
+});
+
+// Get all active and paused sessions for user
+router.get("/state", async (req, res) => {
+  try {
+    const userId = req.userId;
+    const activeSessions = await UserStudyState.find({
+      userId,
+      status: { $in: ["active", "paused"] },
+    }).sort({ lastActiveAt: -1 });
+
+    res.json(activeSessions);
+  } catch (error) {
+    console.error("Get study state error:", error);
+    res.status(500).json({ message: "Failed to fetch study state" });
+  }
+});
+
+// Get specific session by sessionId
+router.get("/state/:sessionId", async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const userId = req.userId;
+
+    const session = await UserStudyState.findOne({
+      userId,
+      sessionId,
+      status: { $in: ["active", "paused"] },
+    });
+
+    if (!session) {
+      return res.status(404).json({ message: "Session not found" });
+    }
+
+    res.json(session);
+  } catch (error) {
+    console.error("Get session error:", error);
+    res.status(500).json({ message: "Failed to fetch session" });
+  }
+});
+
+// Start new study session
+router.post("/state/start", async (req, res) => {
+  try {
+    const { subject, targetTime = 3600 } = req.body;
+    const userId = req.userId;
+
+    if (!subject) {
+      return res.status(400).json({ message: "Subject is required" });
+    }
+
+    // Check if there's already an active session for this subject
+    const existingSession = await UserStudyState.findOne({
+      userId,
+      subject,
+      status: { $in: ["active", "paused"] },
+    });
+
+    if (existingSession) {
+      // Resume existing session
+      existingSession.status = "active";
+      existingSession.lastActiveAt = new Date();
+      await existingSession.save();
+      return res.json(existingSession);
+    }
+
+    // Create new session
+    const sessionId = uuidv4();
+    const newSession = new UserStudyState({
+      userId,
+      subject,
+      targetTime,
+      sessionId,
+      status: "active",
+      startTime: new Date(),
+      lastActiveAt: new Date(),
+    });
+
+    await newSession.save();
+    res.status(201).json(newSession);
+  } catch (error) {
+    console.error("Start session error:", error);
+    res.status(500).json({ message: "Failed to start session" });
+  }
+});
+
+// Update session (pause/resume/update time)
+router.put("/state/:sessionId", async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const { status, elapsedTime, notes } = req.body;
+    const userId = req.userId;
+
+    const session = await UserStudyState.findOne({
+      userId,
+      sessionId,
+      status: { $in: ["active", "paused"] },
+    });
+
+    if (!session) {
+      return res.status(404).json({ message: "Session not found" });
+    }
+
+    if (status) session.status = status;
+    if (elapsedTime !== undefined) session.elapsedTime = elapsedTime;
+    if (notes !== undefined) session.notes = notes;
+    session.lastActiveAt = new Date();
+
+    await session.save();
+    res.json(session);
+  } catch (error) {
+    console.error("Update session error:", error);
+    res.status(500).json({ message: "Failed to update session" });
+  }
+});
+
+// End session and create StudySession record
+router.post("/state/:sessionId/end", async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const { notes = "" } = req.body;
+    const userId = req.userId;
+
+    const session = await UserStudyState.findOne({
+      userId,
+      sessionId,
+      status: { $in: ["active", "paused"] },
+    });
+
+    if (!session) {
+      return res.status(404).json({ message: "Session not found" });
+    }
+
+    // Create StudySession record
+    const studySession = new StudySession({
+      userId,
+      subject: session.subject,
+      actualTime: session.elapsedTime,
+      targetTime: session.targetTime,
+      startTime: session.startTime,
+      endTime: new Date(),
+      completed: true,
+      notes: notes || session.notes,
+    });
+
+    await studySession.save();
+
+    // Remove from UserStudyState
+    await UserStudyState.deleteOne({ _id: session._id });
+
+    // Update user stats
+    await updateUserStats(userId, session.elapsedTime, session.subject);
+
+    res.json({
+      message: "Session completed successfully",
+      studySession,
+    });
+  } catch (error) {
+    console.error("End session error:", error);
+    res.status(500).json({ message: "Failed to end session" });
+  }
+});
+
+// Delete/cancel session
+router.delete("/state/:sessionId", async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const userId = req.userId;
+
+    const result = await UserStudyState.deleteOne({
+      userId,
+      sessionId,
+    });
+
+    if (result.deletedCount === 0) {
+      return res.status(404).json({ message: "Session not found" });
+    }
+
+    res.json({ message: "Session cancelled successfully" });
+  } catch (error) {
+    console.error("Delete session error:", error);
+    res.status(500).json({ message: "Failed to cancel session" });
+  }
+});
+
+// Helper function to update user stats
+async function updateUserStats(userId, sessionTime, subject) {
+  try {
+    const user = await User.findById(userId);
+    if (!user) return;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Update total study time and hours
+    user.stats.totalStudyTime = (user.stats.totalStudyTime || 0) + sessionTime;
+    user.stats.totalStudyHours = Math.round((user.stats.totalStudyTime / 3600) * 100) / 100;
+    user.stats.totalSessions = (user.stats.totalSessions || 0) + 1;
+
+    // Update subjects studied
+    if (!user.stats.subjectsStudied.includes(subject)) {
+      user.stats.subjectsStudied.push(subject);
+    }
+
+    // Update daily stats
+    let todayStats = user.stats.dailyStats.find(stat => 
+      stat.date.toDateString() === today.toDateString()
+    );
+
+    if (!todayStats) {
+      todayStats = {
+        date: today,
+        totalTime: 0,
+        sessions: 0,
+        subjects: []
+      };
+      user.stats.dailyStats.push(todayStats);
+    }
+
+    todayStats.totalTime += sessionTime;
+    todayStats.sessions += 1;
+
+    // Update subject stats for today
+    let subjectStats = todayStats.subjects.find(s => s.name === subject);
+    if (!subjectStats) {
+      subjectStats = { name: subject, time: 0, sessions: 0 };
+      todayStats.subjects.push(subjectStats);
+    }
+    subjectStats.time += sessionTime;
+    subjectStats.sessions += 1;
+
+    // Update streak
+    const lastStudyDate = user.stats.lastStudyDate;
+    if (!lastStudyDate || lastStudyDate < today) {
+      const yesterday = new Date(today);
+      yesterday.setDate(yesterday.getDate() - 1);
+
+      if (lastStudyDate && lastStudyDate >= yesterday) {
+        // Consecutive day
+        user.stats.currentStreak = (user.stats.currentStreak || 0) + 1;
+      } else {
+        // New streak
+        user.stats.currentStreak = 1;
+      }
+
+      user.stats.lastStudyDate = today;
+
+      // Update highest streak
+      if (user.stats.currentStreak > (user.stats.highestStreak || 0)) {
+        user.stats.highestStreak = user.stats.currentStreak;
+      }
+    }
+
+    // Keep only last 30 days of daily stats
+    user.stats.dailyStats = user.stats.dailyStats
+      .filter(stat => {
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        return stat.date >= thirtyDaysAgo;
+      })
+      .sort((a, b) => b.date - a.date);
+
+    await user.save();
+  } catch (error) {
+    console.error("Update user stats error:", error);
+  }
+}
+
+// Get enhanced analytics
+router.get("/analytics", async (req, res) => {
+  try {
+    const userId = req.userId;
+    const { period = 'week', subject, startDate, endDate } = req.query;
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    let dateFilter = {};
+    const now = new Date();
+
+    if (startDate && endDate) {
+      dateFilter = {
+        date: {
+          $gte: new Date(startDate),
+          $lte: new Date(endDate)
+        }
+      };
+    } else {
+      switch (period) {
+        case 'month':
+          const monthAgo = new Date(now);
+          monthAgo.setMonth(monthAgo.getMonth() - 1);
+          dateFilter = { date: { $gte: monthAgo } };
+          break;
+        case 'year':
+          const yearAgo = new Date(now);
+          yearAgo.setFullYear(yearAgo.getFullYear() - 1);
+          dateFilter = { date: { $gte: yearAgo } };
+          break;
+        case 'week':
+        default:
+          const weekAgo = new Date(now);
+          weekAgo.setDate(weekAgo.getDate() - 7);
+          dateFilter = { date: { $gte: weekAgo } };
+      }
+    }
+
+    // Filter daily stats
+    let dailyStats = user.stats.dailyStats.filter(stat => {
+      if (dateFilter.date) {
+        return stat.date >= dateFilter.date.$gte && 
+               (!dateFilter.date.$lte || stat.date <= dateFilter.date.$lte);
+      }
+      return true;
+    });
+
+    // Filter by subject if specified
+    if (subject) {
+      dailyStats = dailyStats.map(day => ({
+        ...day.toObject(),
+        subjects: day.subjects.filter(s => s.name === subject),
+        totalTime: day.subjects
+          .filter(s => s.name === subject)
+          .reduce((sum, s) => sum + s.time, 0),
+        sessions: day.subjects
+          .filter(s => s.name === subject)
+          .reduce((sum, s) => sum + s.sessions, 0)
+      })).filter(day => day.subjects.length > 0);
+    }
+
+    // Calculate summary stats
+    const totalTime = dailyStats.reduce((sum, day) => sum + day.totalTime, 0);
+    const totalSessions = dailyStats.reduce((sum, day) => sum + day.sessions, 0);
+    const averageSessionTime = totalSessions > 0 ? totalTime / totalSessions : 0;
+
+    // Subject breakdown
+    const subjectBreakdown = {};
+    dailyStats.forEach(day => {
+      day.subjects.forEach(subj => {
+        if (!subjectBreakdown[subj.name]) {
+          subjectBreakdown[subj.name] = {
+            totalTime: 0,
+            sessions: 0,
+            averageTime: 0
+          };
+        }
+        subjectBreakdown[subj.name].totalTime += subj.time;
+        subjectBreakdown[subj.name].sessions += subj.sessions;
+      });
+    });
+
+    // Calculate averages
+    Object.keys(subjectBreakdown).forEach(subject => {
+      const data = subjectBreakdown[subject];
+      data.averageTime = data.sessions > 0 ? data.totalTime / data.sessions : 0;
+    });
+
+    res.json({
+      summary: {
+        totalTime,
+        totalSessions,
+        averageSessionTime,
+        totalHours: Math.round((totalTime / 3600) * 100) / 100,
+        daysActive: dailyStats.length,
+        period
+      },
+      dailyStats: dailyStats.sort((a, b) => new Date(a.date) - new Date(b.date)),
+      subjectBreakdown,
+      userStats: {
+        totalStudyHours: user.stats.totalStudyHours,
+        totalSessions: user.stats.totalSessions,
+        currentStreak: user.stats.currentStreak,
+        highestStreak: user.stats.highestStreak,
+        subjectsStudied: user.stats.subjectsStudied
+      }
+    });
+  } catch (error) {
+    console.error("Analytics error:", error);
+    res.status(500).json({ message: "Failed to fetch analytics" });
   }
 });
 
@@ -152,7 +541,7 @@ router.get("/sessions/today", async (req, res) => {
 router.get("/sessions/stats", async (req, res) => {
   try {
     const userId = req.userId;
-    const { period = "week" } = req.query;
+    const { period = "week", subject, filter } = req.query;
 
     let startDate = new Date();
     switch (period) {
@@ -167,10 +556,16 @@ router.get("/sessions/stats", async (req, res) => {
         startDate.setDate(startDate.getDate() - 7);
     }
 
-    const sessions = await StudySession.find({
+    const query = {
       userId,
       createdAt: { $gte: startDate },
-    }).sort({ createdAt: 1 });
+    };
+
+    if (subject) {
+      query.subject = subject;
+    }
+
+    const sessions = await StudySession.find(query).sort({ createdAt: 1 });
 
     const totalSessions = sessions.length;
     const totalStudyTime = sessions.reduce(
@@ -258,6 +653,9 @@ router.post("/sessions", async (req, res) => {
       notes: notes || "",
     });
 
+    // Update user stats
+    await updateUserStats(userId, actualTime, subject);
+
     res.status(201).json(session);
   } catch (error) {
     console.error("Error creating study session:", error);
@@ -271,7 +669,7 @@ router.put("/sessions/:id", async (req, res) => {
     const { id } = req.params;
     const { subject, actualTime, startTime, endTime, completed, notes } =
       req.body;
-    const userId = req.user.id;
+    const userId = req.userId;
 
     const session = await StudySession.findOne({ _id: id, userId });
 
@@ -299,7 +697,7 @@ router.put("/sessions/:id", async (req, res) => {
 router.delete("/sessions/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    const userId = req.user.id;
+    const userId = req.userId;
 
     const session = await StudySession.findOne({ _id: id, userId });
     if (!session) {
@@ -321,6 +719,33 @@ router.get("/quote", async (req, res) => {
     res.status(200).json(data);
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch quote" });
+  }
+});
+
+// Calendar notifications endpoint
+router.get("/notifications/calendar", async (req, res) => {
+  try {
+    const userId = req.userId;
+    const today = new Date();
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    
+    // Get today's and tomorrow's events
+    const upcomingEvents = await CalendarEvent.find({
+      userId,
+      date: {
+        $gte: today,
+        $lte: tomorrow
+      }
+    }).sort({ date: 1, startTime: 1 });
+
+    res.json({
+      events: upcomingEvents,
+      count: upcomingEvents.length
+    });
+  } catch (error) {
+    console.error("Calendar notifications error:", error);
+    res.status(500).json({ message: "Failed to fetch calendar notifications" });
   }
 });
 
@@ -459,7 +884,7 @@ router.put("/timetables/:id", async (req, res) => {
 // Get notes
 router.get("/notes", async (req, res) => {
   try {
-    const { search, subject, page = 1, limit = 20 } = req.query;
+    const { search, subject, page = 1, limit = 10 } = req.query;
     const query = { userId: req.userId };
 
     if (search) query.$text = { $search: search };
@@ -536,39 +961,6 @@ router.delete("/notes/:id", async (req, res) => {
     console.error("Delete note error:", error);
     res.status(500).json({ message: "Failed to delete note" });
   }
-});
-
-// Get user study state
-
-router.get("/state", async (req, res) => {
-  const state = await UserStudyState.findOne({ userId: req.userId });
-  res.json(state || {});
-});
-
-// Update or create state
-router.post("/state", async (req, res) => {
-  const { currentSubject, elapsedTime, startTime, status } = req.body;
-  const update = {
-    currentSubject,
-    elapsedTime,
-    startTime,
-    status,
-    updatedAt: new Date(),
-  };
-
-  const state = await UserStudyState.findOneAndUpdate(
-    { userId: req.userId },
-    update,
-    { upsert: true, new: true }
-  );
-
-  res.json(state);
-});
-
-// Clear state on completion
-router.delete("/state", async (req, res) => {
-  await UserStudyState.deleteOne({ userId: req.userId });
-  res.status(204).end();
 });
 
 export default router;

@@ -32,6 +32,7 @@ export const AuthProvider = ({ children }) => {
       const response = await axios.get(`${API_URL}/api/auth/me`);
       setUser(response.data);
     } catch (error) {
+      console.error('Fetch user error:', error);
       localStorage.removeItem('token');
       delete axios.defaults.headers.common['Authorization'];
     } finally {
@@ -39,37 +40,57 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const setAuthData = (userData, token) => {
+    setUser(userData);
+    if (token) {
+      localStorage.setItem('token', token);
+      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+    }
+  };
+
   const login = async (email, password) => {
     try {
       const response = await axios.post(`${API_URL}/api/auth/login`, { email, password });
-      const { token, user } = response.data;
+      const { token, user: userData, requiresVerification } = response.data;
 
       localStorage.setItem('token', token);
       axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-      setUser(user);
+      setUser(userData);
 
-      toast.success('Welcome back!');
-      return { success: true };
+      if (requiresVerification) {
+        toast.success('Please verify your email to access all features');
+      } else {
+        toast.success('Welcome back!');
+      }
+
+      return { success: true, requiresVerification };
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Login failed');
-      return { success: false, error: error.response?.data?.message };
+      const message = error.response?.data?.message || 'Login failed';
+      toast.error(message);
+      return { success: false, error: message };
     }
   };
 
   const register = async (userData) => {
     try {
       const response = await axios.post(`${API_URL}/api/auth/register`, userData);
-      const { token, user } = response.data;
+      const { token, user: newUser, requiresVerification } = response.data;
 
       localStorage.setItem('token', token);
       axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-      setUser(user);
+      setUser(newUser);
 
-      toast.success('Account created successfully!');
-      return { success: true };
+      if (requiresVerification) {
+        toast.success('Account created! Please check your email for verification.');
+      } else {
+        toast.success('Account created successfully!');
+      }
+
+      return { success: true, requiresVerification };
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Registration failed');
-      return { success: false, error: error.response?.data?.message };
+      const message = error.response?.data?.message || 'Registration failed';
+      toast.error(message);
+      return { success: false, error: message };
     }
   };
 
@@ -80,12 +101,25 @@ export const AuthProvider = ({ children }) => {
     toast.success('Logged out successfully');
   };
 
+  const refreshUser = async () => {
+    try {
+      const response = await axios.get(`${API_URL}/api/auth/me`);
+      setUser(response.data);
+      return response.data;
+    } catch (error) {
+      console.error('Refresh user error:', error);
+      return null;
+    }
+  };
+
   const value = {
     user,
     loading,
     login,
     register,
-    logout
+    logout,
+    setAuthData,
+    refreshUser
   };
 
   return (
