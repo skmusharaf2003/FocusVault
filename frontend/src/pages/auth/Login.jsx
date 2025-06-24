@@ -2,25 +2,26 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Mail, Lock, Eye, EyeOff, BookOpen } from 'lucide-react';
-import { useAuth } from '../../context/AuthContext';
-import toast from 'react-hot-toast';
+import { useAppDispatch, useAuth } from '../../hooks/useRedux';
+import { loginUser } from '../../store/slices/authSlice';
 
 const Login = () => {
-  const { login } = useAuth();
+  const dispatch = useAppDispatch();
+  const { loading } = useAuth();
   const [formData, setFormData] = useState({
     email: '',
     password: ''
   });
   const [showPassword, setShowPassword] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setIsLoading(true);
     
-    const result = await login(formData.email, formData.password);
-    
-    setIsLoading(false);
+    try {
+      await dispatch(loginUser(formData)).unwrap();
+    } catch (error) {
+      // Error is handled in the slice
+    }
   };
 
   const handleGoogleLogin = () => {
@@ -147,6 +148,16 @@ const Login = () => {
           </div>
         </motion.div>
 
+        {/* Forgot Password Link */}
+        <div className="text-right">
+          <Link
+            to="/forgot-password"
+            className="text-sm text-primary-600 hover:text-primary-700 font-medium"
+          >
+            Forgot your password?
+          </Link>
+        </div>
+
         <motion.button
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
@@ -154,10 +165,10 @@ const Login = () => {
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
           type="submit"
-          disabled={isLoading}
+          disabled={loading}
           className="w-full bg-gradient-to-r from-primary-600 to-secondary-600 text-white py-3 rounded-xl font-medium disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {isLoading ? 'Signing In...' : 'Sign In'}
+          {loading ? 'Signing In...' : 'Sign In'}
         </motion.button>
       </form>
 

@@ -2,11 +2,13 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Mail, Lock, User, Eye, EyeOff, BookOpen, ExternalLink } from 'lucide-react';
-import { useAuth } from '../../context/AuthContext';
+import { useAppDispatch, useAuth } from '../../hooks/useRedux';
+import { registerUser } from '../../store/slices/authSlice';
 import toast from 'react-hot-toast';
 
 const Register = () => {
-  const { register } = useAuth();
+  const dispatch = useAppDispatch();
+  const { loading } = useAuth();
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -15,7 +17,6 @@ const Register = () => {
   });
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
 
   const handleSubmit = async (e) => {
@@ -36,15 +37,15 @@ const Register = () => {
       return;
     }
 
-    setIsLoading(true);
-
-    const result = await register({
-      name: formData.name,
-      email: formData.email,
-      password: formData.password
-    });
-
-    setIsLoading(false);
+    try {
+      await dispatch(registerUser({
+        name: formData.name,
+        email: formData.email,
+        password: formData.password
+      })).unwrap();
+    } catch (error) {
+      // Error is handled in the slice
+    }
   };
 
   const handleGoogleRegister = () => {
@@ -261,10 +262,10 @@ const Register = () => {
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
           type="submit"
-          disabled={isLoading || !acceptedTerms}
+          disabled={loading || !acceptedTerms}
           className="w-full bg-gradient-to-r from-primary-600 to-secondary-600 text-white py-3 rounded-xl font-medium disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {isLoading ? 'Creating Account...' : 'Create Account'}
+          {loading ? 'Creating Account...' : 'Create Account'}
         </motion.button>
       </form>
 
